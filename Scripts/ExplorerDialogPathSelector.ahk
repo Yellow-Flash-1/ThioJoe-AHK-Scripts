@@ -48,7 +48,7 @@ f_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
         ; Check if it's a legacy dialog
         if (dialogInfo := DetectLegacyDialog()) {
             ; Use the legacy navigation approach
-            NavigateLegacyDialog(f_path)
+            NavigateLegacyDialog(f_path, f_window_id)
         } else {
             ; Use the existing modern dialog approach
             Send("!{d}")
@@ -59,9 +59,7 @@ f_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
             ControlFocus("Edit1", "a")
         }
         return
-    }
-    else if (f_class = "ConsoleWindowClass")
-    {
+    } else if (f_class = "ConsoleWindowClass") {   
         WinActivate("ahk_id " f_window_id)
         SetKeyDelay(0)
         Send("{Esc}pushd " f_path "{Enter}")
@@ -354,6 +352,14 @@ DisplayDialogPathMenu() {
         }
     }
 
+    ; Show option to navigate to a custom path
+    if (hasItems){
+        CurrentLocations.Add()
+        currentLocations.Add("Enter Custom Path", ShowPathEntryBox)
+        currentLocations.SetIcon("Enter Custom Path", A_WinDir . "\system32\shell32.dll", "23")
+    }
+        
+
     ; Show menu if we have items, otherwise show tooltip
     if (hasItems) {
         CurrentLocations.Show()
@@ -364,6 +370,30 @@ DisplayDialogPathMenu() {
 
     ; Clean up
     CurrentLocations := ""
+}
+
+ShowPathEntryBox(*) {
+    path := InputBox("Enter a path to navigate to", "Path", "w300 h100")
+    
+    ; Check if user cancelled the InputBox
+    if (path.Result = "Cancel")
+        return ""
+
+    ; Trim whitespace
+    trimmedPath := Trim(path.Value)
+        
+    ; Check if the input is empty
+    if (trimmedPath = "")
+        return ""
+
+    ; Check if it's a valid path format. Not necessarily a valid path, but at least a valid format
+    if !RegExMatch(trimmedPath, "^(?:[A-Za-z]:\\|\\\\)[\w\s.-\\]+$") {
+        MsgBox("Invalid path format. Please enter a valid path.")
+        return ""
+    }
+
+    ; Navigate to the chosen path
+    f_Navigate(trimmedPath)
 }
 
 DetectLegacyDialog() {
@@ -389,7 +419,7 @@ DetectLegacyDialog() {
 }
 
 ; Function to navigate to the specified path
-NavigateLegacyDialog(path) {
+NavigateLegacyDialog(path, hwnd) {
     dialogInfo := DetectLegacyDialog()
     if !dialogInfo {
         return
@@ -397,10 +427,17 @@ NavigateLegacyDialog(path) {
 
     if (dialogInfo.Type = "FileDialog") {
         ; Send the path to the edit control using SendMessage
-        DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT
+        DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
+        DllCall("SendMessage", "Ptr", hwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
         
-        ; Send Enter to navigate
-        Send("{Enter}")
+        ; if SendNavigateCommand(hwnd) {
+        ;     return
+        ; } else {
+        ;     ; Send Enter to navigate
+        ;     Sleep(25)
+        ;     Send("{Enter}")
+        ; }
+        
     } else if (dialogInfo.Type = "FolderBrowserDialog") {
         NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
     }
