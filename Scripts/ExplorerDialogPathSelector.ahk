@@ -22,10 +22,13 @@ SetWorkingDir(A_ScriptDir)
 ; Enable debug mode to show tooltips with debug info
 enableExplorerDialogMenuDebug := false  ; Set to true to enable debug output
 
+; Whether to show the disabled clipboard path menu item when no valid path is found on the clipboard, or only when a valid path is found on the clipboard
+alwaysShowClipboardmenuItem := true
+
 ; Configuration
 activeTabSuffix := ""  		 ;  Appears to the right of the active path for each window group
 activeTabPrefix := "► " 	 ;  Appears to the left of the active path for each window group
-inactiveTabPrefix := "    "  ; Indentation for inactive tabs, so they line up
+standardEntryPrefix := "    "  ; Indentation for inactive tabs, so they line up
 dopusRTPath := ""  ; Path to dopusrt.exe - can be empty to disable Directory Opus integration
 ; ------------------------------------------------------------------------------------------------
 
@@ -46,9 +49,9 @@ f_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
         WinActivate("ahk_id " f_window_id)
         
         ; Check if it's a legacy dialog
-        if (dialogInfo := DetectLegacyDialog()) {
+        if (dialogInfo := DetectDialogType()) {
             ; Use the legacy navigation approach
-            NavigateLegacyDialog(f_path, f_window_id)
+            NavigateDialog(f_path, f_window_id)
         } else {
             ; Use the existing modern dialog approach
             Send("!{d}")
@@ -293,7 +296,7 @@ DisplayDialogPathMenu() {
                     if (tabObj.isActiveTab)
                         menuText := activeTabPrefix menuText activeTabSuffix
                     else
-                        menuText := inactiveTabPrefix menuText
+                        menuText := standardEntryPrefix menuText
                     
                     CurrentLocations.Add(menuText, f_Navigate)
                     CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
@@ -319,7 +322,7 @@ DisplayDialogPathMenu() {
                 if (pathObj.isActiveTab)
                     menuText := activeTabPrefix menuText activeTabSuffix
                 else
-                    menuText := inactiveTabPrefix menuText
+                    menuText := standardEntryPrefix menuText
                     
                 CurrentLocations.Add(menuText, f_Navigate)
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
@@ -345,20 +348,33 @@ DisplayDialogPathMenu() {
         
         ; Add Explorer paths
         for path in explorerPaths {
-            menuText := inactiveTabPrefix path
+            menuText := standardEntryPrefix path
             CurrentLocations.Add(menuText, f_Navigate)
             CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
             hasItems := true
         }
     }
 
-    ; Show option to navigate to a custom path
-    if (hasItems){
-        CurrentLocations.Add()
-        currentLocations.Add("Enter Custom Path", ShowPathEntryBox)
-        currentLocations.SetIcon("Enter Custom Path", A_WinDir . "\system32\shell32.dll", "23")
-    }
+    ; If there is a path in the clipboard, add it to the menu
+    if RegExMatch(A_Clipboard, "^(?:[A-Za-z]:\\|\\\\)[\w\s.-\\]+$") {
+        ; Add separator if we had Directory Opus or Explorer paths
+        if (hasItems)
+            CurrentLocations.Add()
         
+        menuText := standardEntryPrefix A_Clipboard
+        CurrentLocations.Add(menuText, f_Navigate)
+        CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
+        hasItems := true
+    } else if alwaysShowClipboardmenuItem = true {
+        ; If there is no path in the clipboard, add an option to enter a path
+        if (hasItems)
+            CurrentLocations.Add()
+
+        menuText := standardEntryPrefix "Paste path from clipboard"
+        CurrentLocations.Add(menuText, f_Navigate) ; Still need the function even if it's disabled
+        CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
+        CurrentLocations.Disable(menuText)
+    }
 
     ; Show menu if we have items, otherwise show tooltip
     if (hasItems) {
@@ -396,16 +412,16 @@ ShowPathEntryBox(*) {
     f_Navigate(trimmedPath)
 }
 
-DetectLegacyDialog() {
+DetectDialogType() {
     ; Wait for the dialog window with class #32770 to be active
     if !WinWaitActive("ahk_class #32770",, 10) {
         return 0
     }
     
-    ; Try to get the handle of the "File name" edit control
+    ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
     try {
         hFileNameEdit := ControlGetHwnd("Edit1", "ahk_class #32770")
-        return {Type: "FileDialog", ControlHwnd: hFileNameEdit}
+        return {Type: "HasEditControl", ControlHwnd: hFileNameEdit}
     } catch {
         ; Try to get the handle of the TreeView control
         try {
@@ -419,25 +435,18 @@ DetectLegacyDialog() {
 }
 
 ; Function to navigate to the specified path
-NavigateLegacyDialog(path, hwnd) {
-    dialogInfo := DetectLegacyDialog()
+NavigateDialog(path, hwnd) {
+    dialogInfo := DetectDialogType()
     if !dialogInfo {
         return
     }
 
-    if (dialogInfo.Type = "FileDialog") {
-        ; Send the path to the edit control using SendMessage
+    if (dialogInfo.Type = "HasEditControl") {
+        ; Send the path to the edit control text box using SendMessage
         DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
+        ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
         DllCall("SendMessage", "Ptr", hwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
-        
-        ; if SendNavigateCommand(hwnd) {
-        ;     return
-        ; } else {
-        ;     ; Send Enter to navigate
-        ;     Sleep(25)
-        ;     Send("{Enter}")
-        ; }
-        
+               
     } else if (dialogInfo.Type = "FolderBrowserDialog") {
         NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
     }
@@ -528,8 +537,7 @@ NavigateToNode(treeView, parentItem, nodeText, isDriveLetter := false) {
     while (hItem) {
         itemText := treeView.GetText(hItem)
         if (isDriveLetter) {
-            ; Special handling for drive letters
-            ; Look for the drive letter inside parentheses
+            ; Special handling for drive letters. Look for them in parentheses, because they might show with name like "Primary (C:)"
             if (itemText ~= "i)\(" . RegExEscape(nodeText) . "\)") {
                 ; Found the drive
                 return hItem
