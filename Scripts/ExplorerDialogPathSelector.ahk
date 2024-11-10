@@ -99,6 +99,21 @@ InitializeSettings() {
             }
         }
     }
+    catch Error as err {
+        MsgBox("Error reading settings file: " err.Message "`n`nUsing default settings.")
+        for k, v in DefaultSettings.OwnProps() {
+            g_settings.%k% := DefaultSettings.%k%
+        }
+    }
+
+    ; ----- Special handling for certain settings -----
+
+    ; For UI Access, always disable if not running standalone
+    if !ThisScriptRunningStandalone() {
+        g_settings.enableUIAccess := false
+    }
+
+    return
 }
 
 ; ---------------------------------------- UTILITY FUNCTIONS  ----------------------------------------------
@@ -739,8 +754,23 @@ ShowSettingsGUI(*) {
 
     UIAccessCheck := settingsGui.AddCheckbox("xm y+10", "Enable UI Access")
     UIAccessCheck.Value := g_settings.enableUIAccess
-    labelUIAccessCheckTooltipText := "Enable `"UI Access`" to allow the script to run in elevated windows protected by UAC without running as admin."
-    AddTooltipToControl(hTT, UIAccessCheck.Hwnd, labelUIAccessCheckTooltipText)
+    labelUIAccessCheckTooltipText := ""
+    if !ThisScriptRunningStandalone() {
+        UIAccessCheck.Value := 0
+        UIAccessCheck.Enabled := 0
+
+        ; Get position of the checkbox before disabling it so we can add an invisible box to apply the tooltip to
+        ; Because the tooltip won't show on a disabled control
+        x := 0, y := 0, w := 0, h := 0
+        UIAccessCheck.GetPos(&x, &y, &w, &h)
+        tooltipOverlay := settingsGui.AddText("x" x " y" y " w" w " h" h " +BackgroundTrans", "")
+
+        labelUIAccessCheckTooltipText := "This script appears to be running as being included by another script. You should enable UI Access via the parent script instead."
+        AddTooltipToControl(hTT, tooltipOverlay.Hwnd, labelUIAccessCheckTooltipText)
+    } else {
+        labelUIAccessCheckTooltipText := "Enable `"UI Access`" to allow the script to run in elevated windows protected by UAC without running as admin."
+        AddTooltipToControl(hTT, UIAccessCheck.Hwnd, labelUIAccessCheckTooltipText)
+    }
     
     ; Add buttons at the bottom
     buttonsY := "y+20"
@@ -851,7 +881,7 @@ CreateTooltipControl(guiHwnd) {
         , "Ptr", 0
         , "Ptr", 0
         , "Ptr")
-    
+
     return hTT
 }
 
