@@ -711,13 +711,13 @@ ShowSettingsGUI(*) {
     ; Add controls - using current values from global variables
     labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Dialog Menu Hotkey:")
     hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dialogMenuHotkey)
-    labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu`nMust use AutoHotkey syntax (AHK V2)"
+    labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu`nMust use AutoHotkey syntax (AHK V2)`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
     AddTooltipToControl(hTT, labelHotkey.Hwnd, labelhotkeyTooltipText)
     AddTooltipToControl(hTT, hotkeyEdit.Hwnd, labelhotkeyTooltipText)
     
     labelOpusRTPath := settingsGui.AddText("xm y+10 w120 h23 +0x200", "DOpus RT Path:")
     dopusPathEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dopusRTPath)
-    labelOpusRTPathTooltipText := "*** For Directory Opus users *** `nPath to dopusrt.exe`nLeave empty to disable Directory Opus integration."
+    labelOpusRTPathTooltipText := "*** For Directory Opus users *** `nPath to dopusrt.exe`n`nOr leave empty to disable Directory Opus integration."
     AddTooltipToControl(hTT, labelOpusRTPath.Hwnd, labelOpusRTPathTooltipText)
     AddTooltipToControl(hTT, dopusPathEdit.Hwnd, labelOpusRTPathTooltipText)
     ; Button to browse for DOpusRT
@@ -732,7 +732,7 @@ ShowSettingsGUI(*) {
     
     labelActiveTabSuffix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Suffix:")
     suffixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.activeTabSuffix)
-    labelActiveTabSuffixTooltipText := "Text/Characters will appear to the right of the active path for each window group, if you want.`nSuch as `"(Active)`""
+    labelActiveTabSuffixTooltipText := "Text/Characters will appear to the right of the active path for each window group, if you want as a label."
     AddTooltipToControl(hTT, labelActiveTabSuffix.Hwnd, labelActiveTabSuffixTooltipText)
     AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
     
@@ -749,7 +749,7 @@ ShowSettingsGUI(*) {
     
     clipboardCheck := settingsGui.AddCheckbox("xm y+10", "Always Show Clipboard Menu Item")
     clipboardCheck.Value := g_settings.alwaysShowClipboardmenuItem
-    labelClipboardCheckTooltipText := "If Disabled: The option to paste the clipboard path will only appear when a valid path is found on the clipboard. If Enabled: The menu entry will always appear, but is disabled when no valid path is found."
+    labelClipboardCheckTooltipText := "If Disabled: The option to paste the clipboard path will only appear when a valid path is found on the clipboard.`nIf Enabled: The menu entry will always appear, but is disabled when no valid path is found."
     AddTooltipToControl(hTT, clipboardCheck.Hwnd, labelClipboardCheckTooltipText)
 
     UIAccessCheck := settingsGui.AddCheckbox("xm y+10", "Enable UI Access")
@@ -881,6 +881,10 @@ CreateTooltipControl(guiHwnd) {
         , "Ptr", 0
         , "Ptr", 0
         , "Ptr")
+
+    ; Set maximum width to enable word wrapping and newlines in tooltips
+    static TTM_SETMAXTIPWIDTH := 0x418
+    DllCall("SendMessage", "Ptr", hTT, "UInt", TTM_SETMAXTIPWIDTH, "Ptr", 0, "Ptr", 600)
 
     return hTT
 }
