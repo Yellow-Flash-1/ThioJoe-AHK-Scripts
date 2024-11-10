@@ -172,69 +172,55 @@ RemoveToolTip() {
 ; Get Explorer paths
 getAllExplorerPaths() {
     paths := []
-    
-    ; Get all CabinetWClass windows
     explorerHwnds := WinGetList("ahk_class CabinetWClass")
-    
-    ; Get Shell.Application once
     shell := ComObject("Shell.Application")
     
-    ; IShellBrowser interface ID
     static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
     
-    ; For each Explorer window
+    ; First make a pass through all explorer windows to get the active tab for each
+    activeTabs := Map()
     for explorerHwnd in explorerHwnds {
         try {
-            ; First get the main window path
-            for window in shell.Windows {
-                try {
-                    if window && window.hwnd && window.hwnd = explorerHwnd {
-                        path := window.Document.Folder.Self.Path
-                        if path && !HasValue(paths, path)
-                            paths.Push(path)
-                        
-                        ; Now try to get tabs
-                        tabCtrl := ControlGetHwnd("ShellTabWindowClass1", explorerHwnd)
-                        if tabCtrl {
-                            ; Get the shell browser interface
-                            shellBrowser := ComObjQuery(window, IID_IShellBrowser, IID_IShellBrowser)
-                            if shellBrowser {
-                                try {
-                                    ; Get the tab window object
-                                    tabWindow := window.Document.Application.Windows
-                                    if tabWindow {
-                                        ; Loop through shell windows again to find ones matching this window's tabs
-                                        for tabShell in shell.Windows {
-                                            try {
-                                                if tabShell && tabShell.hwnd = explorerHwnd {
-                                                    tabPath := tabShell.Document.Folder.Self.Path
-                                                    if tabPath && !HasValue(paths, tabPath)
-                                                        paths.Push(tabPath)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        break  ; Found the main window, move to next explorer
+            if activeTab := ControlGetHwnd("ShellTabWindowClass1", "ahk_id " explorerHwnd) {
+                activeTabs[explorerHwnd] := activeTab
+            }
+        }
+    }
+    
+    ; shell.Windows gives us a collection of all open open tabs as a flat list, not separated by window, so now we loop through and match them up by Hwnd
+    ; Now do a single pass through all tabs
+    for tab in shell.Windows {
+        try {
+            ; Ensure we have the handle of the tab
+            if tab && tab.hwnd {
+                parentWindowHwnd := tab.hwnd
+                path := tab.Document.Folder.Self.Path
+                if path {
+                    ; Check if this tab is active
+                    isActive := false
+                    ; If we have any active tab at all for the parent window
+                    if activeTabs.Has(parentWindowHwnd) {
+                        ; Get an interface to interact with the tab's shell browser
+                        shellBrowser := ComObjQuery(tab, IID_IShellBrowser, IID_IShellBrowser)
+                        ; Call method of Index 3 on the interface to get the tab's handle so we can see if any windows have such an active tab
+                        ; We need to know the method index number from the "vtable" - Apparently the struct for a vtable is often named with "Vtbl" at the end like "IWhateverInterfaceVtbl"
+                        ; IShellBrowserVtbl is in the Windows SDK inside ShObjIdl_core.h. The first 3 methods are AddRef, Release, and QueryInterface, inhereted from IUnknown, 
+                        ;       so the first real method is the fourth, meaning index 3, which is GetWindow and is also the one we want
+                        ; The output of the ComCall GetWindow method here is the handle of the tab, not the parent window, so we can compare it to the activeTabs map
+                        ComCall(3, shellBrowser, "uint*", &thisTab:=0)
+                        isActive := (thisTab = activeTabs[parentWindowHwnd])
                     }
+                    
+                    paths.Push({ 
+                        Hwnd: parentWindowHwnd, 
+                        Path: path, 
+                        IsActive: isActive 
+                    })
                 }
             }
         }
     }
     return paths
-}
-
-; Helper function to check if value exists in array
-HasValue(haystack, needle) {
-    if !(IsObject(haystack))
-        return false
-    for index, value in haystack {
-        if (value = needle)
-            return true
-    }
-    return false
 }
 
 ; Parse the XML and return an array of path objects
@@ -428,24 +414,42 @@ DisplayDialogPathMenu() {
     }
 
     ; Get Explorer paths
+    ; Get Explorer paths
     explorerPaths := getAllExplorerPaths()
-    
+
+    ; Group paths by window handle (Hwnd)
+    windows := Map()
+    for pathObj in explorerPaths {
+        if !windows.Has(pathObj.Hwnd)
+            windows[pathObj.Hwnd] := []
+        windows[pathObj.Hwnd].Push(pathObj)
+    }
+
     ; Add Explorer paths if any exist
     if explorerPaths.Length > 0 {
         ; Add separator if we had Directory Opus paths
         if (hasItems)
             CurrentLocations.Add()
-        
-        ; Add Explorer header
-        CurrentLocations.Add("Windows Explorer", f_Navigate)
-        CurrentLocations.Disable("Windows Explorer")
-        
-        ; Add Explorer paths
-        for path in explorerPaths {
-            menuText := g_settings.standardEntryPrefix path
-            CurrentLocations.Add(menuText, f_Navigate)
-            CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
-            hasItems := true
+
+        windowNum := 1
+        for hwnd, windowPaths in windows {
+            CurrentLocations.Add("Explorer Window " windowNum, f_Navigate)
+            CurrentLocations.Disable("Explorer Window " windowNum)
+
+            for pathObj in windowPaths {
+                menuText := pathObj.Path
+                ; Add prefix and suffix for active tab based on global settings
+                if (pathObj.IsActive)
+                    menuText := g_settings.activeTabPrefix menuText g_settings.activeTabSuffix
+                else
+                    menuText := g_settings.standardEntryPrefix menuText
+
+                CurrentLocations.Add(menuText, f_Navigate)
+                CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
+                hasItems := true
+            }
+
+            windowNum++
         }
     }
 
