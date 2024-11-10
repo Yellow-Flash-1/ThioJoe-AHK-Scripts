@@ -808,10 +808,9 @@ ShowSettingsGUI(*) {
         ; Update settings object
         g_settings.dialogMenuHotkey := hotkeyEdit.Value
         g_settings.dopusRTPath := dopusPathEdit.Value
-        ; Put quotes around the prefix and suffix values, otherwise spaces will be trimmed by the OS. The quotes will be removed when the values are read
-        g_settings.activeTabPrefix := '"' prefixEdit.Value '"'
-        g_settings.activeTabSuffix := '"' suffixEdit.Value '"'
-        g_settings.standardEntryPrefix := '"' standardPrefixEdit.Value '"'
+        g_settings.activeTabPrefix := prefixEdit.Value
+        g_settings.activeTabSuffix := suffixEdit.Value
+        g_settings.standardEntryPrefix := standardPrefixEdit.Value
         g_settings.enableExplorerDialogMenuDebug := debugCheck.Value
         g_settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
         g_settings.enableUIAccess := UIAccessCheck.Value
@@ -942,9 +941,10 @@ SaveSettingsToFile() {
     ; Save all settings to INI file
     IniWrite(g_settings.dialogMenuHotkey, settingsFilePath, "Settings", "dialogMenuHotkey")
     IniWrite(g_settings.dopusRTPath, settingsFilePath, "Settings", "dopusRTPath")
-    IniWrite(g_settings.activeTabPrefix, settingsFilePath, "Settings", "activeTabPrefix")
-    IniWrite(g_settings.activeTabSuffix, settingsFilePath, "Settings", "activeTabSuffix")
-    IniWrite(g_settings.standardEntryPrefix, settingsFilePath, "Settings", "standardEntryPrefix")
+    ; Put quotes around the prefix and suffix values, otherwise spaces will be trimmed by the OS. The quotes will be removed when the values are read back in.
+    IniWrite('"' g_settings.activeTabPrefix '"', settingsFilePath, "Settings", "activeTabPrefix")
+    IniWrite('"' g_settings.activeTabSuffix '"', settingsFilePath, "Settings", "activeTabSuffix")
+    IniWrite('"' g_settings.standardEntryPrefix '"', settingsFilePath, "Settings", "standardEntryPrefix")
     IniWrite(g_settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
     IniWrite(g_settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
     IniWrite(g_settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
