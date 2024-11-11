@@ -825,9 +825,14 @@ ShowSettingsGUI(*) {
         ; When UI Access goes from enabled to disabled, the user must manually close and re-run the script
         if (UIAccessInitialValue = true && UIAccessCheck.Value = false) {
             MsgBox("NOTE: When changing UI Access from Enabled to Disabled, you must manually close and re-run the script/app for changes to take effect.", "Settings Saved - Process Restart Required", "Icon!")
-        } else {
-            ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
+        } else if (UIAccessInitialValue = false && UIAccessCheck.Value = true) {
+            ; When enabling UI Access, we can reload the script to enable it. Ask the user if they want to do this now
+            result := MsgBox("UI Access has been enabled. Do you want to restart the script now to apply the changes?", "Settings Saved - Process Restart Required", "YesNo Icon!")
+            if (result = "Yes") {
+                Reload
+            }
         }
+        ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
 
         ; Disable the original hotkey by passing in the previous hotkey string
         UpdateHotkeyFromSettings(HotkeyInitialValue)
