@@ -75,6 +75,10 @@ DisplayDialogPathMenuCallback(ThisHotkey) {
 }
 
 UpdateHotkeyFromSettings(previousHotkeyString := "") {
+    ; If the new hotkey is the same as before, return. Otherwise it will disable itself and re-enable itself unnecessarily
+    if (g_settings.dialogMenuHotkey = previousHotkeyString)
+        return
+
     if (previousHotkeyString != "") {
         try {
             HotKey(previousHotkeyString, "Off")
@@ -85,7 +89,7 @@ UpdateHotkeyFromSettings(previousHotkeyString := "") {
     }
 
     try {
-        HotKey(g_settings.dialogMenuHotkey, DisplayDialogPathMenuCallback)
+        HotKey(g_settings.dialogMenuHotkey, DisplayDialogPathMenuCallback, "On") ; Include 'On' option to ensure it's enabled if it had been disabled before, like changing the hotkey back again
     }
     catch Error as hotkeySetErr {
         MsgBox("Error setting hotkey: " hotkeySetErr.Message "`n`nHotkey Set To:`n" g_settings.dialogMenuHotkey)
@@ -724,7 +728,7 @@ ShowSettingsGUI(*) {
     AddTooltipToControl(hTT, hotkeyEdit.Hwnd, labelhotkeyTooltipText)
     
     labelOpusRTPath := settingsGui.AddText("xm y+10 w120 h23 +0x200", "DOpus RT Path:")
-    dopusPathEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dopusRTPath)
+    dopusPathEdit := settingsGui.AddEdit("x+10 yp w200 h30 -Multi -Wrap", g_settings.dopusRTPath) ; Setting explicit height and -Multi because for some reason it was wrapping the control box down. Not sure if -Wrap is necessary
     labelOpusRTPathTooltipText := "*** For Directory Opus users *** `nPath to dopusrt.exe`n`nOr leave empty to disable Directory Opus integration."
     AddTooltipToControl(hTT, labelOpusRTPath.Hwnd, labelOpusRTPathTooltipText)
     AddTooltipToControl(hTT, dopusPathEdit.Hwnd, labelOpusRTPathTooltipText)
