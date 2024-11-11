@@ -10,13 +10,6 @@
 
 ; ---------------------------------------------------------------------------------------------------
 
-; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
-;       With only one semicolon it actually is active. With two semicolons it is truly commented out.
-;       The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
-;          > Be aware enabling UI Access for compiled would require the script to be signed to work properly and placed in a trusted location
-; Recommended not to uncomment this even if compiling unless you have a reason or it might not work as expected
-;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 0
-
 #Requires AutoHotkey v2.0
 #SingleInstance force
 SetWorkingDir(A_ScriptDir)
@@ -42,6 +35,15 @@ class DefaultSettings {
 }
 
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
+
+; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
+;       With only one semicolon it actually is active. With two semicolons it is truly commented out.
+;       The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
+;          > Be aware enabling UI Access for compiled would require the script to be signed to work properly and placed in a trusted location
+; Recommended not to uncomment this even if compiling unless you have a reason or it might not work as expected
+;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 0
+global g_version := "1.0.0.0"
+global g_programName := "Explorer Dialog Path Selector"
 
 ; Global variable to hold current settings
 global g_settings := {}
@@ -708,14 +710,14 @@ RegExEscape(str) {
 ; Function to show the settings GUI
 ShowSettingsGUI(*) {
     ; Create the settings window
-    settingsGui := Gui("+Resize", "Explorer Dialog Path Menu Settings")
+    settingsGui := Gui("+Resize", g_programName " - Settings")
     settingsGui.OnEvent("Size", GuiResize)
-    settingsGui.SetFont("s10")
+    settingsGui.SetFont("s10", "Segoe UI")
 
     hTT := CreateTooltipControl(settingsGui.Hwnd)
     
     ; Add controls - using current values from global variables
-    labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Dialog Menu Hotkey:")
+    labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Menu Hotkey:")
     hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dialogMenuHotkey)
     labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu`nMust use AutoHotkey syntax (AHK V2)`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
     AddTooltipToControl(hTT, labelHotkey.Hwnd, labelhotkeyTooltipText)
@@ -884,13 +886,13 @@ ShowSettingsGUI(*) {
 ShowHelpWindow(*) {
     global 
     ; Added MinSize to prevent window from becoming too small
-    helpGui := Gui("+Resize +MinSize400x300", "Explorer Dialog Path Menu - Help & Tips")
+    helpGui := Gui("+Resize +MinSize400x300", g_programName " - Help & Tips")
     helpGui.SetFont("s10", "Segoe UI")
     helpGui.OnEvent("Size", GuiResize)
     
     hTT := CreateTooltipControl(helpGui.Hwnd)
     
-    helpGui.AddText("xm y10 w300 h23", "Explorer Dialog Path Menu Help")
+    ; helpGui.AddText("xm y10 w300 h23", g_programName " Help")
     
     ; Settings file info
     labelSettingsFileLocation := g_usingSettingsFromFile ? 
@@ -1098,6 +1100,11 @@ LoadSettingsFromSettingsFilePath(settingsFilePath){
     }
 }
 
+ShowAboutWindow(*) {
+    MsgBox(g_programName "`nVersion: " g_version "`n`nAuthor: ThioJoe`n`nProject Repository: https://github.com/ThioJoe/AHK-Scripts", "About", "Iconi")
+}
+
 ; Add a tray menu item to show the settings GUI
 A_TrayMenu.Insert("2&", "")  ; Separator
-A_TrayMenu.Insert("3&", "Dialog Path Settings", ShowSettingsGUI)
+A_TrayMenu.Insert("3&", "Path Selector Settings", ShowSettingsGUI)
+A_TrayMenu.Insert("4&", "Path selector About", ShowAboutWindow)
