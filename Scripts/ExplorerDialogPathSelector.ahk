@@ -45,6 +45,7 @@ class DefaultSettings {
 
 ; Global variable to hold current settings
 global g_settings := {}
+global g_usingSettingsFromFile := false
 
 ; Default settings file path is next to the script. If permissions fail, will try AppData
 global g_settingsFileName := "ExplorerDialogPathSelector-Settings.ini"
@@ -112,33 +113,9 @@ InitializeSettings() {
     if !ThisScriptRunningStandalone() or A_IsCompiled{
         g_settings.enableUIAccess := false
     }
-
     return
 }
 
-LoadSettingsFromSettingsFilePath(settingsFilePath){
-    if FileExist(settingsFilePath) {
-        ; Load each setting from the INI file
-        g_settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", DefaultSettings.dialogMenuHotkey)
-        g_settings.dopusRTPath := IniRead(settingsFilePath, "Settings", "dopusRTPath", DefaultSettings.dopusRTPath)
-        g_settings.activeTabPrefix := IniRead(settingsFilePath, "Settings", "activeTabPrefix", DefaultSettings.activeTabPrefix)
-        g_settings.activeTabSuffix := IniRead(settingsFilePath, "Settings", "activeTabSuffix", DefaultSettings.activeTabSuffix)
-        g_settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", DefaultSettings.standardEntryPrefix)
-        g_settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", DefaultSettings.enableExplorerDialogMenuDebug)
-        g_settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", DefaultSettings.alwaysShowClipboardmenuItem)
-        g_settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", DefaultSettings.enableUIAccess)
-        
-        ; Convert string boolean values to actual booleans
-        g_settings.enableExplorerDialogMenuDebug := g_settings.enableExplorerDialogMenuDebug = "1"
-        g_settings.alwaysShowClipboardmenuItem := g_settings.alwaysShowClipboardmenuItem = "1"
-        g_settings.enableUIAccess := g_settings.enableUIAccess = "1"
-    } else {
-        ; If no settings file exists, use defaults
-        for k, v in DefaultSettings.OwnProps() {
-            g_settings.%k% := DefaultSettings.%k%
-        }
-    }
-}
 
 ; ---------------------------------------- UTILITY FUNCTIONS  ----------------------------------------------
 ; Function to check if the script is running standalone or included in another script
@@ -807,7 +784,7 @@ ShowSettingsGUI(*) {
         AddTooltipToControl(hTT, UIAccessCheck.Hwnd, labelUIAccessCheckTooltipText)
     }
     
-    ; Add buttons at the bottom
+    ; Add buttons at the bottom - See positioning cheatsheet: https://www.reddit.com/r/AutoHotkey/comments/1968fq0/a_cheatsheet_for_building_guis_using_relative/
     buttonsY := "y+20"
     ; Reset button
     resetBtn := settingsGui.AddButton("xm " buttonsY " w80", "Defaults")
@@ -820,6 +797,10 @@ ShowSettingsGUI(*) {
     saveBtn.OnEvent("Click", SaveSettings)
     labelButtonSaveTooltipText := "Save the current settings to a file to automatically load in the future."
     AddTooltipToControl(hTT, saveBtn.Hwnd, labelButtonSaveTooltipText)
+    ; Help button
+    helpBtn := settingsGui.AddButton("x+10 w70", "Help")
+    helpBtn.OnEvent("Click", ShowHelpWindow)
+
 
     ; Set variables to track when certain settings are changed for special handling
     UIAccessInitialValue := g_settings.enableUIAccess
@@ -884,10 +865,72 @@ ShowSettingsGUI(*) {
                     } else {
                         ctrl.Move(,, width - 150)  ; Standard width for other edit controls
                     }
-                } else if ctrl.Type = "Button" && ctrl.Text = "Browse..." {
-                    ctrl.Move(width - 75)  ; Anchor Browse button to window edge
+                } else if ctrl.Type = "Button" {
+                    if ctrl.Text = "Browse..." {
+                        ctrl.Move(width - 75)  ; Anchor Browse button to window edge
+                    } else if ctrl.Text = "Help" {
+                        ctrl.Move(width - 80)  ; Right align Help button with 20px margin
+                    }
                 }
             }
+        }
+    }
+}
+
+ShowHelpWindow(*) {
+    global 
+    helpGui := Gui("+Resize", "Explorer Dialog Path Menu Help")
+    helpGui.OnEvent("Size", GuiResize)
+    
+    hTT := CreateTooltipControl(helpGui.Hwnd)
+    
+    helpGui.AddText("xm y10 w300 h23", "Explorer Dialog Path Menu Help")
+    
+    ; Settings file info
+    labelSettingsFileLocation := g_usingSettingsFromFile ? 
+        "Current config file path: " g_settingsFilePath : ; Show the path if we're using a settings file
+        "Using default settings (no config file)"         ; Otherwise, show that we're using defaults
+    helpGui.AddText("xm y+20 w300", labelSettingsFileLocation)
+    
+    ; AHK Key Names documentation link
+    linkText := "For information about key names in AutoHotkey, click here"
+    keyNameLink := helpGui.AddLink("xm y+20 w300", linkText)
+    keyNameLink.OnEvent("Click", (*) => Run("https://www.autohotkey.com/docs/v2/lib/Send.htm"))
+    
+    elevatedTip := ""
+    ; Elevated processes tip for compiled version
+    if A_IsCompiled {
+        elevatedTip := "TIP: To make this work with dialogs launched by elevated processes without having to run it as admin, "
+        elevatedTip .= "place the executable in a trusted location such as `"C:\Program Files\...`""
+    } else if !ThisScriptRunningStandalone() {
+        elevatedTip := "TIP: To make this work with dialogs launched by elevated processes, "
+        elevatedTip .= "enable UI Access in the parent script."
+    } else {
+        elevatedTip := "TIP: Enable UI Access to allow the script to work in elevated windows protected by UAC without running as admin."
+    }
+    labelElevatedTip := helpGui.AddText("xm y+20 w300", elevatedTip)
+    
+    ; Close button at the bottom
+    helpGui.AddButton("xm y+20 w80 Default", "Close").OnEvent("Click", (*) => helpGui.Destroy())
+    
+    helpGui.Show()
+    
+    GuiResize(thisGui, minMax, width, height) {
+        if minMax = -1  ; The window has been minimized
+            return
+        
+        ; Update control positions based on new window size
+        for ctrl in thisGui {
+            if ctrl.HasProp("Type") {
+                if ctrl.Type = "Text" or ctrl.Type = "Link" {
+                    ctrl.Move(,, width - 15)  ; Add some margin to the right
+                    ctrl.Redraw()
+                } else if ctrl.Type = "Button" {
+                    if ctrl.Text = "Close" {
+                        ctrl.Move(, height - 40)  ; Bottom align Close button with 40px margin from bottom
+                    }
+                }
+            } 
         }
     }
 }
@@ -995,6 +1038,8 @@ SaveSettingsToFile() {
         IniWrite(g_settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
         IniWrite(g_settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
         IniWrite(g_settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
+
+        global g_usingSettingsFromFile := true
     
         if (!fileAlreadyExisted) {
             MsgBox("Settings saved to file:`n" g_settingsFileName "`n`nIn Location:`n" settingsFilePath "`n`n Settings will be automatically loaded from file from now on.", "Settings File Created", "Iconi")
@@ -1022,6 +1067,32 @@ SaveSettingsToFile() {
         MsgBox("Error saving settings to file:`n" A_LastError "`n`nTried to save in: `n" g_settingsFilePath, "Error Saving Settings", "Icon!")
     }
     
+}
+
+LoadSettingsFromSettingsFilePath(settingsFilePath){
+    if FileExist(settingsFilePath) {
+        ; Load each setting from the INI file
+        g_settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", DefaultSettings.dialogMenuHotkey)
+        g_settings.dopusRTPath := IniRead(settingsFilePath, "Settings", "dopusRTPath", DefaultSettings.dopusRTPath)
+        g_settings.activeTabPrefix := IniRead(settingsFilePath, "Settings", "activeTabPrefix", DefaultSettings.activeTabPrefix)
+        g_settings.activeTabSuffix := IniRead(settingsFilePath, "Settings", "activeTabSuffix", DefaultSettings.activeTabSuffix)
+        g_settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", DefaultSettings.standardEntryPrefix)
+        g_settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", DefaultSettings.enableExplorerDialogMenuDebug)
+        g_settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", DefaultSettings.alwaysShowClipboardmenuItem)
+        g_settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", DefaultSettings.enableUIAccess)
+        
+        ; Convert string boolean values to actual booleans
+        g_settings.enableExplorerDialogMenuDebug := g_settings.enableExplorerDialogMenuDebug = "1"
+        g_settings.alwaysShowClipboardmenuItem := g_settings.alwaysShowClipboardmenuItem = "1"
+        g_settings.enableUIAccess := g_settings.enableUIAccess = "1"
+
+        global g_usingSettingsFromFile := true
+    } else {
+        ; If no settings file exists, use defaults
+        for k, v in DefaultSettings.OwnProps() {
+            g_settings.%k% := DefaultSettings.%k%
+        }
+    }
 }
 
 ; Add a tray menu item to show the settings GUI
