@@ -19,7 +19,7 @@ SetWorkingDir(A_ScriptDir)
 
 ; ---------------------------------------- DEFAULT USER SETTINGS ----------------------------------------
 ; These will be overridden by settings in the settings ini file if it exists. Otherwise these defaults will be used.
-class DefaultSettings {
+class pathSelector_DefaultSettings {
     ; Hotkey to show the menu. Default is Middle Mouse Button. If including this script in another script, you could choose to set this hotkey in the main script and comment this line out
     static dialogMenuHotkey := "~MButton"
     ; Enable debug mode to show tooltips with debug info
@@ -58,26 +58,27 @@ pathSelector_SetupSystemTray(
 ;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 0
 
 ; Globals about the program
-global g_version := "1.0.0.0"
-global g_programName := "Explorer Dialog Path Selector"
+global g_pathSelector_version := "1.0.0.0"
+global g_pathSelector_programName := "Explorer Dialog Path Selector"
 
 ; Global variable to hold current settings
-global g_settings := {}
-global g_usingSettingsFromFile := false
+global g_PathSelector_Settings := {}
 
-; Default settings file path is next to the script. If permissions fail, will try AppData
-global g_settingsFileName := "ExplorerDialogPathSelector-Settings.ini"
-global g_settingsFileDirectory := A_ScriptDir
-global g_settingsFilePath := g_settingsFileDirectory "\" g_settingsFileName
-g_appDataDirName := "Explorer-Dialog-Path-Selector"
-global g_settingsFileAppDataDirectory := A_AppData "\" g_appDataDirName
-global g_settingsFileAppDataPath := g_settingsFileAppDataDirectory "\" g_settingsFileName
+; Global object to hold info about the settings file
+global g_PathSelector_SettingsFileInfo := {}
+g_PathSelector_SettingsFileInfo.fileName := "ExplorerDialogPathSelector-Settings.ini",
+g_PathSelector_SettingsFileInfo.directoryPath := A_ScriptDir
+g_PathSelector_SettingsFileInfo.filePath := g_PathSelector_SettingsFileInfo.directoryPath "\" g_PathSelector_SettingsFileInfo.fileName
+g_PathSelector_SettingsFileInfo.appDataDirName := "Explorer-Dialog-Path-Selector"
+g_PathSelector_SettingsFileInfo.appDataDirectoryPath := A_AppData "\" g_PathSelector_SettingsFileInfo.appDataDirName
+g_PathSelector_SettingsFileInfo.appDataFilePath := g_PathSelector_SettingsFileInfo.appDataDirectoryPath "\" g_PathSelector_SettingsFileInfo.fileName
+g_PathSelector_SettingsFileInfo.usingSettingsFile := false
 
 InitializeSettings()
 ; If the script is running standalone and UI access is installed...
 ; Reload self with UI Access for the script - Allows usage within elevated windows protected by UAC without running the script as admin
 ; See Docs: https://www.autohotkey.com/docs/v1/FAQ.htm#uac
-if (g_settings.enableUIAccess = true) and !A_IsCompiled and ThisScriptRunningStandalone() and !InStr(A_AhkPath, "_UIA") {
+if (g_PathSelector_Settings.enableUIAccess = true) and !A_IsCompiled and ThisScriptRunningStandalone() and !InStr(A_AhkPath, "_UIA") {
     Run "*uiAccess " A_ScriptFullPath
     ExitApp
 }
@@ -92,7 +93,7 @@ DisplayDialogPathMenuCallback(ThisHotkey) {
 
 UpdateHotkeyFromSettings(previousHotkeyString := "") {
     ; If the new hotkey is the same as before, return. Otherwise it will disable itself and re-enable itself unnecessarily
-    if (g_settings.dialogMenuHotkey = previousHotkeyString)
+    if (g_PathSelector_Settings.dialogMenuHotkey = previousHotkeyString)
         return
 
     if (previousHotkeyString != "") {
@@ -105,10 +106,10 @@ UpdateHotkeyFromSettings(previousHotkeyString := "") {
     }
 
     try {
-        HotKey(g_settings.dialogMenuHotkey, DisplayDialogPathMenuCallback, "On") ; Include 'On' option to ensure it's enabled if it had been disabled before, like changing the hotkey back again
+        HotKey(g_PathSelector_Settings.dialogMenuHotkey, DisplayDialogPathMenuCallback, "On") ; Include 'On' option to ensure it's enabled if it had been disabled before, like changing the hotkey back again
     }
     catch Error as hotkeySetErr {
-        MsgBox("Error setting hotkey: " hotkeySetErr.Message "`n`nHotkey Set To:`n" g_settings.dialogMenuHotkey)
+        MsgBox("Error setting hotkey: " hotkeySetErr.Message "`n`nHotkey Set To:`n" g_PathSelector_Settings.dialogMenuHotkey)
     }
 }
 
@@ -118,31 +119,31 @@ InitializeSettings() {
     ; ---------- Conditional Default Settings ----------
     ; Check for the existence of the hard coded default Directory Opus exe path and disable Directory Opus integration if it doesn't exist
     ; This is to prevent the script from trying to use Directory Opus integration if the path is invalid, but still load whatever value from user settings file if there is one
-    if !FileExist(DefaultSettings.dopusRTPath) {
-        DefaultSettings.dopusRTPath := ""
+    if !FileExist(pathSelector_DefaultSettings.dopusRTPath) {
+        pathSelector_DefaultSettings.dopusRTPath := ""
     }
 
     ; ------------------ Load settings Files ------------------
     ; If the settings file isn't in the current directory, but it is in AppData, use the AppData path
-    if (!FileExist(g_settingsFilePath)) and FileExist(g_settingsFileAppDataPath) {
-        g_settingsFilePath := g_settingsFileAppDataPath
-        g_settingsFileDirectory := g_settingsFileAppDataDirectory
+    if (!FileExist(g_PathSelector_SettingsFileInfo.filePath)) and FileExist(g_PathSelector_SettingsFileInfo.appDataFilePath) {
+        g_PathSelector_SettingsFileInfo.filePath := g_PathSelector_SettingsFileInfo.appDataFilePath
+        g_PathSelector_SettingsFileInfo.directoryPath := g_PathSelector_SettingsFileInfo.appDataDirectoryPath
     }
 
     try {
-        LoadSettingsFromSettingsFilePath(g_settingsFilePath)
+        LoadSettingsFromSettingsFilePath(g_PathSelector_SettingsFileInfo.filePath)
     }
     catch Error as err {
         MsgBox("Error reading settings file: " err.Message "`n`nUsing default settings.")
-        for k, v in DefaultSettings.OwnProps() {
-            g_settings.%k% := DefaultSettings.%k%
+        for k, v in pathSelector_DefaultSettings.OwnProps() {
+            g_PathSelector_Settings.%k% := pathSelector_DefaultSettings.%k%
         }
     }
     
     ; ----- Special handling for certain settings -----
     ; For UI Access, always disable if not running standalone
     if !ThisScriptRunningStandalone() or A_IsCompiled{
-        g_settings.enableUIAccess := false
+        g_PathSelector_Settings.enableUIAccess := false
     }
     return
 }
@@ -164,8 +165,8 @@ f_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
     ; Strip any prefix markers from the path
     f_path := RegExReplace(A_ThisMenuItem, "^[►▶→•\s]+\s*", "")
     ; Strip any custom suffix if present
-    if (g_settings.activeTabSuffix)
-        f_path := RegExReplace(f_path, "\Q" g_settings.activeTabSuffix "\E$", "")
+    if (g_PathSelector_Settings.activeTabSuffix)
+        f_path := RegExReplace(f_path, "\Q" g_PathSelector_Settings.activeTabSuffix "\E$", "")
     
     if (f_path = "")
         return
@@ -257,12 +258,12 @@ getAllExplorerPaths() {
 
 ; Parse the XML and return an array of path objects
 GetDOpusPaths() {
-    if (g_settings.dopusRTPath = "") {
+    if (g_PathSelector_Settings.dopusRTPath = "") {
         return []
     }
 
-    if !FileExist(g_settings.dopusRTPath) {
-        MsgBox("Directory Opus Runtime (dopusrt.exe) not found at:`n" g_settings.dopusRTPath "`n`nDirectory Opus integration won't work. To enable it, set the correct path in the script configuration. Or set it to an empty string to avoid this error.", "DOpus Integration Error", "Icon!")
+    if !FileExist(g_PathSelector_Settings.dopusRTPath) {
+        MsgBox("Directory Opus Runtime (dopusrt.exe) not found at:`n" g_PathSelector_Settings.dopusRTPath "`n`nDirectory Opus integration won't work. To enable it, set the correct path in the script configuration. Or set it to an empty string to avoid this error.", "DOpus Integration Error", "Icon!")
         return []
     }
     
@@ -270,7 +271,7 @@ GetDOpusPaths() {
     try FileDelete(tempFile)
     
     try {
-        cmd := '"' g_settings.dopusRTPath '" /info "' tempFile '",paths'
+        cmd := '"' g_PathSelector_Settings.dopusRTPath '" /info "' tempFile '",paths'
         RunWait(cmd,, "Hide")
         
         if !FileExist(tempFile)
@@ -317,7 +318,7 @@ GetDOpusPaths() {
 ; Display the menu
 DisplayDialogPathMenu() {
     global
-    if (g_settings.enableExplorerDialogMenuDebug)
+    if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
     {
         ToolTip("Hotkey Pressed: " A_ThisHotkey)
         Sleep(1000)
@@ -335,7 +336,7 @@ DisplayDialogPathMenu() {
             f_window_id := WinGetID("a")
             f_class := WinGetClass("a")
         } catch as err {
-            if (g_settings.enableExplorerDialogMenuDebug)
+            if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
             {
                 ToolTip("Unable to detect active window")
                 Sleep(1000)
@@ -347,7 +348,7 @@ DisplayDialogPathMenu() {
 
     ; Verify we got valid window info
     if (!f_window_id || !f_class) {
-        if (g_settings.enableExplorerDialogMenuDebug)
+        if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
         {
             ToolTip("No valid window detected")
             Sleep(1000)
@@ -356,7 +357,7 @@ DisplayDialogPathMenu() {
         return
     }
 
-    if (g_settings.enableExplorerDialogMenuDebug)
+    if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
     {
         ToolTip("Window ID: " f_window_id "`nClass: " f_class)
         Sleep(1000)
@@ -366,7 +367,7 @@ DisplayDialogPathMenu() {
     ; Don't display menu unless it's a dialog or console window
     if !(f_class ~= "^(?i:#32770|ConsoleWindowClass)$")
     {
-        if (g_settings.enableExplorerDialogMenuDebug)
+        if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
         {
             ToolTip("Window class does not match expected: " f_class)
             Sleep(1000)
@@ -380,7 +381,7 @@ DisplayDialogPathMenu() {
     hasItems := false
     
     ; Only get Directory Opus paths if dopusRTPath is set
-    if (g_settings.dopusRTPath != "") {
+    if (g_PathSelector_Settings.dopusRTPath != "") {
         ; Get paths from Directory Opus using DOpusRT
         paths := GetDOpusPaths()
         
@@ -406,9 +407,9 @@ DisplayDialogPathMenu() {
                     menuText := tabObj.path
                     ; Add prefix and suffix for active tab based on global settings
                     if (tabObj.isActiveTab)
-                        menuText := g_settings.activeTabPrefix menuText g_settings.activeTabSuffix
+                        menuText := g_PathSelector_Settings.activeTabPrefix menuText g_PathSelector_Settings.activeTabSuffix
                     else
-                        menuText := g_settings.standardEntryPrefix menuText
+                        menuText := g_PathSelector_Settings.standardEntryPrefix menuText
                     
                     CurrentLocations.Add(menuText, f_Navigate)
                     CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
@@ -432,9 +433,9 @@ DisplayDialogPathMenu() {
                 menuText := pathObj.path
                 ; Add prefix and suffix for active tab based on global settings
                 if (pathObj.isActiveTab)
-                    menuText := g_settings.activeTabPrefix menuText g_settings.activeTabSuffix
+                    menuText := g_PathSelector_Settings.activeTabPrefix menuText g_PathSelector_Settings.activeTabSuffix
                 else
-                    menuText := g_settings.standardEntryPrefix menuText
+                    menuText := g_PathSelector_Settings.standardEntryPrefix menuText
                     
                 CurrentLocations.Add(menuText, f_Navigate)
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
@@ -472,9 +473,9 @@ DisplayDialogPathMenu() {
                 menuText := pathObj.Path
                 ; Add prefix and suffix for active tab based on global settings
                 if (pathObj.IsActive)
-                    menuText := g_settings.activeTabPrefix menuText g_settings.activeTabSuffix
+                    menuText := g_PathSelector_Settings.activeTabPrefix menuText g_PathSelector_Settings.activeTabSuffix
                 else
-                    menuText := g_settings.standardEntryPrefix menuText
+                    menuText := g_PathSelector_Settings.standardEntryPrefix menuText
 
                 CurrentLocations.Add(menuText, f_Navigate)
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
@@ -491,16 +492,16 @@ DisplayDialogPathMenu() {
         if (hasItems)
             CurrentLocations.Add()
         
-        menuText := g_settings.standardEntryPrefix A_Clipboard
+        menuText := g_PathSelector_Settings.standardEntryPrefix A_Clipboard
         CurrentLocations.Add(menuText, f_Navigate)
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         hasItems := true
-    } else if g_settings.alwaysShowClipboardmenuItem = true {
+    } else if g_PathSelector_Settings.alwaysShowClipboardmenuItem = true {
         ; If there is no path in the clipboard, add an option to enter a path
         if (hasItems)
             CurrentLocations.Add()
 
-        menuText := g_settings.standardEntryPrefix "Paste path from clipboard"
+        menuText := g_PathSelector_Settings.standardEntryPrefix "Paste path from clipboard"
         CurrentLocations.Add(menuText, f_Navigate) ; Still need the function even if it's disabled
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         CurrentLocations.Disable(menuText)
@@ -739,7 +740,7 @@ RegExEscape(str) {
 ; Function to show the settings GUI
 ShowSettingsGUI(*) {
     ; Create the settings window
-    settingsGui := Gui("+Resize", g_programName " - Settings")
+    settingsGui := Gui("+Resize", g_pathSelector_programName " - Settings")
     settingsGui.OnEvent("Size", GuiResize)
     settingsGui.SetFont("s10", "Segoe UI")
 
@@ -747,7 +748,7 @@ ShowSettingsGUI(*) {
     
     ; Add controls - using current values from global variables
     labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Menu Hotkey:")
-    hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dialogMenuHotkey)
+    hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_PathSelector_Settings.dialogMenuHotkey)
     hotkeyEdit.SetFont("s12", "Consolas")
     labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu (Using AutoHotkey V2 syntax)`n`nSee `"Help`" menu for link to documentation about key names."
     labelhotkeyTooltipText .= "`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
@@ -755,7 +756,7 @@ ShowSettingsGUI(*) {
     AddTooltipToControl(hTT, hotkeyEdit.Hwnd, labelhotkeyTooltipText)
     
     labelOpusRTPath := settingsGui.AddText("xm y+10 w120 h23 +0x200", "DOpus RT Path:")
-    dopusPathEdit := settingsGui.AddEdit("x+10 yp w200 h30 -Multi -Wrap", g_settings.dopusRTPath) ; Setting explicit height and -Multi because for some reason it was wrapping the control box down. Not sure if -Wrap is necessary
+    dopusPathEdit := settingsGui.AddEdit("x+10 yp w200 h30 -Multi -Wrap", g_PathSelector_Settings.dopusRTPath) ; Setting explicit height and -Multi because for some reason it was wrapping the control box down. Not sure if -Wrap is necessary
     labelOpusRTPathTooltipText := "*** For Directory Opus users *** `nPath to dopusrt.exe`n`nOr leave empty to disable Directory Opus integration."
     AddTooltipToControl(hTT, labelOpusRTPath.Hwnd, labelOpusRTPathTooltipText)
     AddTooltipToControl(hTT, dopusPathEdit.Hwnd, labelOpusRTPathTooltipText)
@@ -764,13 +765,13 @@ ShowSettingsGUI(*) {
     browseBtn.OnEvent("Click", (*) => BrowseForDopusRT(dopusPathEdit))
     
     labelActiveTabPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Prefix:")
-    prefixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.activeTabPrefix)
+    prefixEdit := settingsGui.AddEdit("x+10 yp w200", g_PathSelector_Settings.activeTabPrefix)
     labelActiveTabPrefixTooltipText := "Text/Characters that appears to the left of the active path for each window group"
     AddTooltipToControl(hTT, labelActiveTabPrefix.Hwnd, labelActiveTabPrefixTooltipText)
     AddTooltipToControl(hTT, prefixEdit.Hwnd, labelActiveTabPrefixTooltipText)
     
     labelStandardEntryPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Non-Active Prefix:")
-    standardPrefixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.standardEntryPrefix)
+    standardPrefixEdit := settingsGui.AddEdit("x+10 yp w200", g_PathSelector_Settings.standardEntryPrefix)
     labelStandardEntryPrefixTooltipText := "Indentation spaces for inactive tabs, so they line up"
     AddTooltipToControl(hTT, labelStandardEntryPrefix.Hwnd, labelStandardEntryPrefixTooltipText)
     AddTooltipToControl(hTT, standardPrefixEdit.Hwnd, labelStandardEntryPrefixTooltipText)
@@ -782,17 +783,17 @@ ShowSettingsGUI(*) {
     ; AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
     
     debugCheck := settingsGui.AddCheckbox("xm y+15", "Enable Debug Mode")
-    debugCheck.Value := g_settings.enableExplorerDialogMenuDebug
+    debugCheck.Value := g_PathSelector_Settings.enableExplorerDialogMenuDebug
     labelDebugCheckTooltipText := "Show tooltips with debug information when the hotkey is pressed.`nUseful for troubleshooting."
     AddTooltipToControl(hTT, debugCheck.Hwnd, labelDebugCheckTooltipText)
     
     clipboardCheck := settingsGui.AddCheckbox("xm y+5", "Always Show Clipboard Menu Item")
-    clipboardCheck.Value := g_settings.alwaysShowClipboardmenuItem
+    clipboardCheck.Value := g_PathSelector_Settings.alwaysShowClipboardmenuItem
     labelClipboardCheckTooltipText := "If Disabled: The option to paste the clipboard path will only appear when a valid path is found on the clipboard.`nIf Enabled: The menu entry will always appear, but is disabled when no valid path is found."
     AddTooltipToControl(hTT, clipboardCheck.Hwnd, labelClipboardCheckTooltipText)
 
     UIAccessCheck := settingsGui.AddCheckbox("xm y+5", "Enable UI Access")
-    UIAccessCheck.Value := g_settings.enableUIAccess
+    UIAccessCheck.Value := g_PathSelector_Settings.enableUIAccess
     labelUIAccessCheckTooltipText := ""
     if !ThisScriptRunningStandalone() or A_IsCompiled {
         UIAccessCheck.Value := 0
@@ -861,8 +862,8 @@ ShowSettingsGUI(*) {
     UIAccessInitialValue := ""
     HotkeyInitialValue := ""
     RecordInitialValuesFromGlobalSettings() {
-        UIAccessInitialValue := g_settings.enableUIAccess
-        HotkeyInitialValue := g_settings.dialogMenuHotkey
+        UIAccessInitialValue := g_PathSelector_Settings.enableUIAccess
+        HotkeyInitialValue := g_PathSelector_Settings.dialogMenuHotkey
     }
     RecordInitialValuesFromGlobalSettings()
     
@@ -870,26 +871,26 @@ ShowSettingsGUI(*) {
     settingsGui.Show()
     
     ResetSettings(*) {
-        hotkeyEdit.Value := DefaultSettings.dialogMenuHotkey
-        dopusPathEdit.Value := DefaultSettings.dopusRTPath
-        prefixEdit.Value := DefaultSettings.activeTabPrefix
+        hotkeyEdit.Value := pathSelector_DefaultSettings.dialogMenuHotkey
+        dopusPathEdit.Value := pathSelector_DefaultSettings.dopusRTPath
+        prefixEdit.Value := pathSelector_DefaultSettings.activeTabPrefix
         ;suffixEdit.Value := DefaultSettings.activeTabSuffix
-        standardPrefixEdit.Value := DefaultSettings.standardEntryPrefix
-        debugCheck.Value := DefaultSettings.enableExplorerDialogMenuDebug
-        clipboardCheck.Value := DefaultSettings.alwaysShowClipboardmenuItem
-        UIAccessCheck.Value := DefaultSettings.enableUIAccess
+        standardPrefixEdit.Value := pathSelector_DefaultSettings.standardEntryPrefix
+        debugCheck.Value := pathSelector_DefaultSettings.enableExplorerDialogMenuDebug
+        clipboardCheck.Value := pathSelector_DefaultSettings.alwaysShowClipboardmenuItem
+        UIAccessCheck.Value := pathSelector_DefaultSettings.enableUIAccess
     }
     
     SaveSettings(*) {
         ; Update settings object
-        g_settings.dialogMenuHotkey := hotkeyEdit.Value
-        g_settings.dopusRTPath := dopusPathEdit.Value
-        g_settings.activeTabPrefix := prefixEdit.Value
+        g_PathSelector_Settings.dialogMenuHotkey := hotkeyEdit.Value
+        g_PathSelector_Settings.dopusRTPath := dopusPathEdit.Value
+        g_PathSelector_Settings.activeTabPrefix := prefixEdit.Value
         ;g_settings.activeTabSuffix := suffixEdit.Value
-        g_settings.standardEntryPrefix := standardPrefixEdit.Value
-        g_settings.enableExplorerDialogMenuDebug := debugCheck.Value
-        g_settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
-        g_settings.enableUIAccess := UIAccessCheck.Value
+        g_PathSelector_Settings.standardEntryPrefix := standardPrefixEdit.Value
+        g_PathSelector_Settings.enableExplorerDialogMenuDebug := debugCheck.Value
+        g_PathSelector_Settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
+        g_PathSelector_Settings.enableUIAccess := UIAccessCheck.Value
         
         SaveSettingsToFile()
         
@@ -978,7 +979,7 @@ ShowSettingsGUI(*) {
 ShowHelpWindow(*) {
     global 
     ; Added MinSize to prevent window from becoming too small
-    helpGui := Gui("+Resize +MinSize400x300", g_programName " - Help & Tips")
+    helpGui := Gui("+Resize +MinSize400x300", g_pathSelector_programName " - Help & Tips")
     helpGui.SetFont("s10", "Segoe UI")
     helpGui.OnEvent("Size", GuiResize)
     
@@ -991,10 +992,10 @@ ShowHelpWindow(*) {
     settingsFileDescription.SetFont("s10 bold")
     labelFileLocationText := ""
     labelFileLocationEdit := ""
-    if g_usingSettingsFromFile {
+    if g_PathSelector_SettingsFileInfo.usingSettingsFile {
         ; labelFileLocation := helpGui.AddText("xm y+0 w300 +Wrap", g_settingsFilePath)
         ; Show an edit text box so the user can copy the path and also so it word wraps properly even with no spaces
-        labelFileLocationEdit := helpGui.AddEdit("xm y+5 w300 h30 +ReadOnly", g_settingsFilePath)
+        labelFileLocationEdit := helpGui.AddEdit("xm y+5 w300 h30 +ReadOnly", g_PathSelector_SettingsFileInfo.filePath)
     } else {
         labelFileLocation := helpGui.AddText("xm y+0 w300 +Wrap", "N/A - Using default settings (no config file)")
     }
@@ -1143,7 +1144,7 @@ BrowseForDopusRT(editControl) {
 SaveSettingsToFile() {
     global
     SaveToPath(settingsFileDir){
-        settingsFilePath := settingsFileDir "\" g_settingsFileName
+        settingsFilePath := settingsFileDir "\" g_PathSelector_SettingsFileInfo.fileName
 
         fileAlreadyExisted := (FileExist(settingsFilePath) != "") ; If an empty string is returned from FileExist, the file was not found
 
@@ -1151,42 +1152,42 @@ SaveSettingsToFile() {
         settingsFolder := DirCreate(settingsFileDir)
 
         ; Save all settings to INI file
-        IniWrite(g_settings.dialogMenuHotkey, settingsFilePath, "Settings", "dialogMenuHotkey")
-        IniWrite(g_settings.dopusRTPath, settingsFilePath, "Settings", "dopusRTPath")
+        IniWrite(g_PathSelector_Settings.dialogMenuHotkey, settingsFilePath, "Settings", "dialogMenuHotkey")
+        IniWrite(g_PathSelector_Settings.dopusRTPath, settingsFilePath, "Settings", "dopusRTPath")
         ; Put quotes around the prefix and suffix values, otherwise spaces will be trimmed by the OS. The quotes will be removed when the values are read back in.
-        IniWrite('"' g_settings.activeTabPrefix '"', settingsFilePath, "Settings", "activeTabPrefix")
-        IniWrite('"' g_settings.activeTabSuffix '"', settingsFilePath, "Settings", "activeTabSuffix")
-        IniWrite('"' g_settings.standardEntryPrefix '"', settingsFilePath, "Settings", "standardEntryPrefix")
-        IniWrite(g_settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
-        IniWrite(g_settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
-        IniWrite(g_settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
+        IniWrite('"' g_PathSelector_Settings.activeTabPrefix '"', settingsFilePath, "Settings", "activeTabPrefix")
+        IniWrite('"' g_PathSelector_Settings.activeTabSuffix '"', settingsFilePath, "Settings", "activeTabSuffix")
+        IniWrite('"' g_PathSelector_Settings.standardEntryPrefix '"', settingsFilePath, "Settings", "standardEntryPrefix")
+        IniWrite(g_PathSelector_Settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
+        IniWrite(g_PathSelector_Settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
+        IniWrite(g_PathSelector_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
 
-        global g_usingSettingsFromFile := true
+        g_PathSelector_SettingsFileInfo.usingSettingsFile := true
     
         if (!fileAlreadyExisted) {
-            MsgBox("Settings saved to file:`n" g_settingsFileName "`n`nIn Location:`n" settingsFilePath "`n`n Settings will be automatically loaded from file from now on.", "Settings File Created", "Iconi")
+            MsgBox("Settings saved to file:`n" g_PathSelector_SettingsFileInfo.fileName "`n`nIn Location:`n" settingsFilePath "`n`n Settings will be automatically loaded from file from now on.", "Settings File Created", "Iconi")
         }
     }
 
     ; Try saving to the current default settings path
     try {
-        SaveToPath(g_settingsFileDirectory)
+        SaveToPath(g_PathSelector_SettingsFileInfo.directoryPath)
     } catch OSError as oErr {
         ; If it's error number 5, it's access denied, so try appdata path instead unless it's already the appdata path
-        if (oErr.Number = 5 && g_settingsFilePath != g_settingsFileAppDataPath) {
+        if (oErr.Number = 5 && g_PathSelector_SettingsFileInfo.filePath != g_PathSelector_SettingsFileInfo.appDataFilePath) {
             try {
                 ; Try to save to AppData path
-                SaveToPath(g_settingsFileAppDataDirectory)
-                g_settingsFilePath := g_settingsFileAppDataPath ; If successful, update the global settings file path
-                g_settingsFileDirectory := g_settingsFileAppDataDirectory
+                SaveToPath(g_PathSelector_SettingsFileInfo.appDataDirectoryPath)
+                g_PathSelector_SettingsFileInfo.filePath := g_PathSelector_SettingsFileInfo.appDataFilePath ; If successful, update the global settings file path
+                g_PathSelector_SettingsFileInfo.directoryPath := g_PathSelector_SettingsFileInfo.appDataDirectoryPath
             } catch Error as innerErr{
-                MsgBox("Error saving settings to file:`n" innerErr.Message "`n`nTried to save in: `n" g_settingsFileAppDataPath, "Error Saving Settings", "Icon!")
+                MsgBox("Error saving settings to file:`n" innerErr.Message "`n`nTried to save in: `n" g_PathSelector_SettingsFileInfo.appDataFilePath, "Error Saving Settings", "Icon!")
             }
         } else if (oErr.Number = 5) {
-            MsgBox("Error saving settings to file:`n" oErr.Message "`n`nTried to save in: `n" g_settingsFilePath, "Error Saving Settings", "Icon!")
+            MsgBox("Error saving settings to file:`n" oErr.Message "`n`nTried to save in: `n" g_PathSelector_SettingsFileInfo.filePath, "Error Saving Settings", "Icon!")
         }
     } catch {
-        MsgBox("Error saving settings to file:`n" A_LastError "`n`nTried to save in: `n" g_settingsFilePath, "Error Saving Settings", "Icon!")
+        MsgBox("Error saving settings to file:`n" A_LastError "`n`nTried to save in: `n" g_PathSelector_SettingsFileInfo.filePath, "Error Saving Settings", "Icon!")
     }
     
 }
@@ -1194,31 +1195,31 @@ SaveSettingsToFile() {
 LoadSettingsFromSettingsFilePath(settingsFilePath){
     if FileExist(settingsFilePath) {
         ; Load each setting from the INI file
-        g_settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", DefaultSettings.dialogMenuHotkey)
-        g_settings.dopusRTPath := IniRead(settingsFilePath, "Settings", "dopusRTPath", DefaultSettings.dopusRTPath)
-        g_settings.activeTabPrefix := IniRead(settingsFilePath, "Settings", "activeTabPrefix", DefaultSettings.activeTabPrefix)
-        g_settings.activeTabSuffix := IniRead(settingsFilePath, "Settings", "activeTabSuffix", DefaultSettings.activeTabSuffix)
-        g_settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", DefaultSettings.standardEntryPrefix)
-        g_settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", DefaultSettings.enableExplorerDialogMenuDebug)
-        g_settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", DefaultSettings.alwaysShowClipboardmenuItem)
-        g_settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", DefaultSettings.enableUIAccess)
+        g_PathSelector_Settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", pathSelector_DefaultSettings.dialogMenuHotkey)
+        g_PathSelector_Settings.dopusRTPath := IniRead(settingsFilePath, "Settings", "dopusRTPath", pathSelector_DefaultSettings.dopusRTPath)
+        g_PathSelector_Settings.activeTabPrefix := IniRead(settingsFilePath, "Settings", "activeTabPrefix", pathSelector_DefaultSettings.activeTabPrefix)
+        g_PathSelector_Settings.activeTabSuffix := IniRead(settingsFilePath, "Settings", "activeTabSuffix", pathSelector_DefaultSettings.activeTabSuffix)
+        g_PathSelector_Settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", pathSelector_DefaultSettings.standardEntryPrefix)
+        g_PathSelector_Settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", pathSelector_DefaultSettings.enableExplorerDialogMenuDebug)
+        g_PathSelector_Settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", pathSelector_DefaultSettings.alwaysShowClipboardmenuItem)
+        g_PathSelector_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
         
         ; Convert string boolean values to actual booleans
-        g_settings.enableExplorerDialogMenuDebug := g_settings.enableExplorerDialogMenuDebug = "1"
-        g_settings.alwaysShowClipboardmenuItem := g_settings.alwaysShowClipboardmenuItem = "1"
-        g_settings.enableUIAccess := g_settings.enableUIAccess = "1"
+        g_PathSelector_Settings.enableExplorerDialogMenuDebug := g_PathSelector_Settings.enableExplorerDialogMenuDebug = "1"
+        g_PathSelector_Settings.alwaysShowClipboardmenuItem := g_PathSelector_Settings.alwaysShowClipboardmenuItem = "1"
+        g_PathSelector_Settings.enableUIAccess := g_PathSelector_Settings.enableUIAccess = "1"
 
-        global g_usingSettingsFromFile := true
+        g_PathSelector_SettingsFileInfo.usingSettingsFile := true
     } else {
         ; If no settings file exists, use defaults
-        for k, v in DefaultSettings.OwnProps() {
-            g_settings.%k% := DefaultSettings.%k%
+        for k, v in pathSelector_DefaultSettings.OwnProps() {
+            g_PathSelector_Settings.%k% := pathSelector_DefaultSettings.%k%
         }
     }
 }
 
 ShowAboutWindow(*) {
-    MsgBox(g_programName "`nVersion: " g_version "`n`nAuthor: ThioJoe`n`nProject Repository: https://github.com/ThioJoe/AHK-Scripts", "About", "Iconi")
+    MsgBox(g_pathSelector_programName "`nVersion: " g_pathSelector_version "`n`nAuthor: ThioJoe`n`nProject Repository: https://github.com/ThioJoe/AHK-Scripts", "About", "Iconi")
 }
 
 ; ---------------------------- SYSTEM TRAY MENU CUSTOMIZATION ----------------------------
