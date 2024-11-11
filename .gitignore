@@ -400,3 +400,4 @@ FodyWeavers.xsd
 # My excludes
 *.ini
 Test.*
+*.bak

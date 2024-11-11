@@ -732,7 +732,9 @@ ShowSettingsGUI(*) {
     ; Add controls - using current values from global variables
     labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Menu Hotkey:")
     hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dialogMenuHotkey)
-    labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu`nMust use AutoHotkey syntax (AHK V2)`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
+    hotkeyEdit.SetFont("s10", "Consolas")
+    labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu (Using AutoHotkey V2 syntax)`n`nSee `"Help`" menu for link to documentation about key names."
+    labelhotkeyTooltipText .= "`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
     AddTooltipToControl(hTT, labelHotkey.Hwnd, labelhotkeyTooltipText)
     AddTooltipToControl(hTT, hotkeyEdit.Hwnd, labelhotkeyTooltipText)
     
@@ -751,29 +753,29 @@ ShowSettingsGUI(*) {
     AddTooltipToControl(hTT, labelActiveTabPrefix.Hwnd, labelActiveTabPrefixTooltipText)
     AddTooltipToControl(hTT, prefixEdit.Hwnd, labelActiveTabPrefixTooltipText)
     
-    labelActiveTabSuffix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Suffix:")
-    suffixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.activeTabSuffix)
-    labelActiveTabSuffixTooltipText := "Text/Characters will appear to the right of the active path for each window group, if you want as a label."
-    AddTooltipToControl(hTT, labelActiveTabSuffix.Hwnd, labelActiveTabSuffixTooltipText)
-    AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
-    
-    labelStandardEntryPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Standard Prefix:")
+    labelStandardEntryPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Non-Active Prefix:")
     standardPrefixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.standardEntryPrefix)
     labelStandardEntryPrefixTooltipText := "Indentation spaces for inactive tabs, so they line up"
     AddTooltipToControl(hTT, labelStandardEntryPrefix.Hwnd, labelStandardEntryPrefixTooltipText)
     AddTooltipToControl(hTT, standardPrefixEdit.Hwnd, labelStandardEntryPrefixTooltipText)
+
+    ; labelActiveTabSuffix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Suffix:")
+    ; suffixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.activeTabSuffix)
+    ; labelActiveTabSuffixTooltipText := "Text/Characters will appear to the right of the active path for each window group, if you want as a label."
+    ; AddTooltipToControl(hTT, labelActiveTabSuffix.Hwnd, labelActiveTabSuffixTooltipText)
+    ; AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
     
     debugCheck := settingsGui.AddCheckbox("xm y+15", "Enable Debug Mode")
     debugCheck.Value := g_settings.enableExplorerDialogMenuDebug
     labelDebugCheckTooltipText := "Show tooltips with debug information when the hotkey is pressed.`nUseful for troubleshooting."
     AddTooltipToControl(hTT, debugCheck.Hwnd, labelDebugCheckTooltipText)
     
-    clipboardCheck := settingsGui.AddCheckbox("xm y+10", "Always Show Clipboard Menu Item")
+    clipboardCheck := settingsGui.AddCheckbox("xm y+5", "Always Show Clipboard Menu Item")
     clipboardCheck.Value := g_settings.alwaysShowClipboardmenuItem
     labelClipboardCheckTooltipText := "If Disabled: The option to paste the clipboard path will only appear when a valid path is found on the clipboard.`nIf Enabled: The menu entry will always appear, but is disabled when no valid path is found."
     AddTooltipToControl(hTT, clipboardCheck.Hwnd, labelClipboardCheckTooltipText)
 
-    UIAccessCheck := settingsGui.AddCheckbox("xm y+10", "Enable UI Access")
+    UIAccessCheck := settingsGui.AddCheckbox("xm y+5", "Enable UI Access")
     UIAccessCheck.Value := g_settings.enableUIAccess
     labelUIAccessCheckTooltipText := ""
     if !ThisScriptRunningStandalone() or A_IsCompiled {
@@ -800,14 +802,19 @@ ShowSettingsGUI(*) {
         AddTooltipToControl(hTT, UIAccessCheck.Hwnd, labelUIAccessCheckTooltipText)
     }
 
+    ; Add divider line to the next checkboxes because they aren't persistent settings
+    checkBoxDivider := settingsGui.AddText("xm y+15 h2 w150 0x10")
+
     ; Add checkbox for whether to keep the settings window open after saving
-    keepOpenCheck := settingsGui.AddCheckbox("xm y+20", "Keep This Window Open After Saving")
+    keepOpenCheck := settingsGui.AddCheckbox("xm y+10", "Keep This Window Open After Saving")
+    keepOpenCheck.SetFont("s9") ; Smaller font for this checkbox
     keepOpenCheck.Value := false ; False by default - This isn't a saved setting, just a temporary preference
     keepOpenCheck.OnEvent("Click", (*) => ToggleAlwaysOnTopCheckVisibility(keepOpenCheck.Value))
     labelKeepOpenCheckTooltipText := "Keep this window open after saving the settings.`nGood for experimenting with different settings.`n`n(Note: This checkbox setting is not saved.)"
     AddTooltipToControl(hTT, keepOpenCheck.Hwnd, labelKeepOpenCheckTooltipText)
     ; Checkbox for whether to keep the window on top always. Hidden by default and shown only if keepOpenCheck is checked
     keepOnTopCheck := settingsGui.AddCheckbox("xm y+5 +Hidden1", "Keep This Window Always On Top") ; +Hidden hides by default, but setting +Hidden1 to make it explicitly hidden
+    keepOnTopCheck.SetFont("s9") ; Smaller font for this checkbox
     keepOnTopCheck.Value := false ; False by default - This isn't a saved setting, just a temporary preference
     keepOnTopCheck.OnEvent("Click", (*) => SetSettingsWindowAlwaysOnTop(keepOnTopCheck.Value))
     labelKeepOnTopCheckTooltipText := "Keep this window always on top of other windows.`nGood for keeping it visible while testing settings.`n`n(Note: This checkbox setting is not saved.)"
@@ -847,7 +854,7 @@ ShowSettingsGUI(*) {
         hotkeyEdit.Value := DefaultSettings.dialogMenuHotkey
         dopusPathEdit.Value := DefaultSettings.dopusRTPath
         prefixEdit.Value := DefaultSettings.activeTabPrefix
-        suffixEdit.Value := DefaultSettings.activeTabSuffix
+        ;suffixEdit.Value := DefaultSettings.activeTabSuffix
         standardPrefixEdit.Value := DefaultSettings.standardEntryPrefix
         debugCheck.Value := DefaultSettings.enableExplorerDialogMenuDebug
         clipboardCheck.Value := DefaultSettings.alwaysShowClipboardmenuItem
@@ -859,7 +866,7 @@ ShowSettingsGUI(*) {
         g_settings.dialogMenuHotkey := hotkeyEdit.Value
         g_settings.dopusRTPath := dopusPathEdit.Value
         g_settings.activeTabPrefix := prefixEdit.Value
-        g_settings.activeTabSuffix := suffixEdit.Value
+        ;g_settings.activeTabSuffix := suffixEdit.Value
         g_settings.standardEntryPrefix := standardPrefixEdit.Value
         g_settings.enableExplorerDialogMenuDebug := debugCheck.Value
         g_settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
@@ -897,21 +904,28 @@ ShowSettingsGUI(*) {
         
         ; Update control positions based on new window size
         for ctrl in thisGui {
+            ; For specific control objects
+            if ctrl = checkBoxDivider {
+                ctrl.Move(,, width - 30)  ; Set width to fill the window
+                continue
+            }
+
+            ; For certain control types
             if ctrl.HasProp("Type") {
                 if ctrl.Type = "Edit" {
                     ; Leave space for the Browse button if this is the DOpus path edit box
                     if (ctrl.HasProp("ClassNN") && ctrl.ClassNN = "Edit2") {
                         ctrl.Move(,, width - 220)  ; Leave extra space for Browse button
                     } else {
-                        ctrl.Move(,, width - 150)  ; Standard width for other edit controls
+                        ctrl.Move(,, width - 150)  ; Set consistent width for other edit boxes
                     }
                 } else if ctrl.Type = "Button" {
                     if ctrl.Text = "Browse..." {
-                        ctrl.Move(width - 70)  ; Anchor Browse button to window edge
+                        ctrl.Move(width - 70)  ; Anchor Browse button to right side window edge
                     } else if ctrl.Text = "Help" {
-                        ctrl.Move(width-80, height-40)  ; Right align Help button with 20px margin
+                        ctrl.Move(width-85, height-45)  ; Right align Help button with some margin
                     } else{
-                        ctrl.Move(, height-40)  ; Bottom align buttons with 40px margin from bottom
+                        ctrl.Move(, height-45)  ; Bottom align buttons with 40px margin from bottom
                     }
                     ctrl.Redraw()
                 }
@@ -951,30 +965,47 @@ ShowHelpWindow(*) {
     ; helpGui.AddText("xm y10 w300 h23", g_programName " Help")
     
     ; Settings file info
-    labelSettingsFileLocation := g_usingSettingsFromFile ? 
-        "Current config file path:`n" g_settingsFilePath : 
-        "Using default settings (no config file)"
-    helpGui.AddText("xm y+10 w300", labelSettingsFileLocation)
-    
-    ; AHK Key Names documentation link
-    linkText := 'For information about key names in AutoHotkey, click here:`n <a href="https://www.autohotkey.com/docs/v2/lib/Send.htm#keynames">https://www.autohotkey.com/docs/v2/lib/Send.htm</a>'
-    keyNameLink := helpGui.AddLink("xm y+20 w300", linkText)
-    
-    elevatedTip := ""
-    if A_IsCompiled {
-        elevatedTip := "TIP: To make this work with dialogs launched by elevated processes without having to run it as admin, place the executable in a trusted location such as `"C:\Program Files\...`""
-    } else if !ThisScriptRunningStandalone() {
-        elevatedTip := "TIP: To make this work with dialogs launched by elevated processes, enable UI Access in the parent script."
+    settingsFileDescription :=  helpGui.AddText("xm y+10 w300 h20", "Current config file path:") ; Creating this separately so we can set the font
+    settingsFileDescription.SetFont("s10 bold")
+    labelFileLocationText := ""
+    labelFileLocationEdit := ""
+    if g_usingSettingsFromFile {
+        ; labelFileLocation := helpGui.AddText("xm y+0 w300 +Wrap", g_settingsFilePath)
+        ; Show an edit text box so the user can copy the path and also so it word wraps properly even with no spaces
+        labelFileLocationEdit := helpGui.AddEdit("xm y+5 w300 h30 +ReadOnly", g_settingsFilePath)
     } else {
-        elevatedTip := "TIP: Enable UI Access to allow the script to work in elevated windows protected by UAC without running as admin."
+        labelFileLocation := helpGui.AddText("xm y+0 w300 +Wrap", "N/A - Using default settings (no config file)")
     }
     
-    labelElevatedTip := helpGui.AddText("xm y+10 w300 h60", elevatedTip)
+    ; AHK Key Names documentation link
+    linkDescription := helpGui.AddText("xm y+20 w300 h20", "For information about key names in AutoHotkey, click here:") ; Creating this separately so we can set the font
+    linkDescription.SetFont("s10 bold")
+    linkText := '<a href="https://www.autohotkey.com/docs/v2/lib/Send.htm#keynames">https://www.autohotkey.com/docs/v2/lib/Send.htm</a>'
+    keyNameLink := helpGui.AddLink("xm y+0 w300", linkText)
+
+    ; Tips section
+    tipsHeader := helpGui.AddText("xm y+20 w300 h20", "Tips:")
+    tipsHeader.SetFont("s10 bold")
+
+    ; Display info about UI Access depending on the mode the script is running in
+    elevatedTipText := ""
+    if A_IsCompiled {
+        elevatedTipText := "• To make this proram work with dialogs launched by elevated processes without having to run it as admin, place the executable in a trusted location such as `"C:\Program Files\...`""
+        elevatedTipText .= "  (You do NOT need to run this exe itself as Admin for this to work.)"
+    } else if !ThisScriptRunningStandalone() {
+        elevatedTipText := "• To make this work with dialogs launched by elevated processes, enable UI Access via the parent script."
+        elevatedTipText .= 'See this documentation page for more info:`n <a href="https://www.autohotkey.com/docs/v1/FAQ.htm#uac">https://www.autohotkey.com/docs/v1/FAQ.htm#uac</a>'
+    } else {
+        elevatedTipText := "• Enable `"UI Access`" setting to allow the script to work in dialogs from elevated windows without running this script itself as admin."
+    }
+    labelElevatedTip := helpGui.AddLink("xm y+5 w300", elevatedTipText)
     
-    helpGui.AddButton("xm y+10 w80 Default", "Close").OnEvent("Click", (*) => helpGui.Destroy())
+    ; ------------------------------------------------------------------------
+    closeButton := helpGui.AddButton("xm y+10 w80 Default", "Close")
+    closeButton.OnEvent("Click", (*) => helpGui.Destroy())
     
     ; Show with specific initial size
-    helpGui.Show("w450 h250")
+    helpGui.Show("w500 h250")
     
     GuiResize(thisGui, minMax, width, height) {
         if minMax = -1  ; The window has been minimized
@@ -984,16 +1015,24 @@ ShowHelpWindow(*) {
         for ctrl in thisGui {
             if ctrl.HasProp("Type") {
                 if ctrl.Type = "Text" or ctrl.Type = "Link" {
-                    ctrl.Move(,, width - 15)  ; Add some margin to the right
+                    ctrl.Move(,, width - 25)  ; Add some margin to the right
                     ctrl.Redraw()
                 } else if ctrl.Type = "Button" {
                     if ctrl.Text = "Close" {
                         ctrl.Move(, height - 40)  ; Bottom align Close button with 40px margin from bottom
                     }
+                } else if ctrl.Type = "Edit" {
+                    ctrl.Move(,, width - 25)  ; Add some margin to the right
                 }
             } 
         }
     }
+
+    if (labelFileLocationEdit != "") {
+        labelFileLocationEdit.Value := labelFileLocationEdit.Value ; This is hacky but it forces the edit box to update and show the text properly, before it was strangely shifted until clicked on
+    }
+    ; Default to focus on the close button. Doesn't really matter which control, just so it doesn't select the text in the edit box
+    closeButton.Focus()
 }
 
 ; Create a tooltip control window and return its handle
