@@ -31,7 +31,7 @@ class DefaultSettings {
     static activeTabSuffix := ""            ;  Appears to the right of the active path for each window group
     static activeTabPrefix := "► "          ;  Appears to the left of the active path for each window group
     static standardEntryPrefix := "    "    ; Indentation for inactive tabs, so they line up
-    static dopusRTPath := ""  ; Path to dopusrt.exe - can be empty to disable Directory Opus integration
+    static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"  ; Path to dopusrt.exe - can be empty to disable Directory Opus integration
 }
 
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
@@ -98,6 +98,15 @@ UpdateHotkeyFromSettings(previousHotkeyString := "") {
 
 InitializeSettings() {
     global
+
+    ; ---------- Conditional Default Settings ----------
+    ; Check for the existence of the hard coded default Directory Opus exe path and disable Directory Opus integration if it doesn't exist
+    ; This is to prevent the script from trying to use Directory Opus integration if the path is invalid, but still load whatever value from user settings file if there is one
+    if !FileExist(DefaultSettings.dopusRTPath) {
+        DefaultSettings.dopusRTPath := ""
+    }
+
+    ; ------------------ Load settings Files ------------------
     ; If the settings file isn't in the current directory, but it is in AppData, use the AppData path
     if (!FileExist(g_settingsFilePath)) and FileExist(g_settingsFileAppDataPath) {
         g_settingsFilePath := g_settingsFileAppDataPath
