@@ -799,7 +799,20 @@ ShowSettingsGUI(*) {
         labelUIAccessCheckTooltipText := "Enable `"UI Access`" to allow the script to run in elevated windows protected by UAC without running as admin."
         AddTooltipToControl(hTT, UIAccessCheck.Hwnd, labelUIAccessCheckTooltipText)
     }
-    
+
+    ; Add checkbox for whether to keep the settings window open after saving
+    keepOpenCheck := settingsGui.AddCheckbox("xm y+20", "Keep This Window Open After Saving")
+    keepOpenCheck.Value := false ; False by default - This isn't a saved setting, just a temporary preference
+    keepOpenCheck.OnEvent("Click", (*) => ToggleAlwaysOnTopCheckVisibility(keepOpenCheck.Value))
+    labelKeepOpenCheckTooltipText := "Keep this window open after saving the settings.`nGood for experimenting with different settings.`n`n(Note: This checkbox setting is not saved.)"
+    AddTooltipToControl(hTT, keepOpenCheck.Hwnd, labelKeepOpenCheckTooltipText)
+    ; Checkbox for whether to keep the window on top always. Hidden by default and shown only if keepOpenCheck is checked
+    keepOnTopCheck := settingsGui.AddCheckbox("xm y+5 +Hidden1", "Keep This Window Always On Top") ; +Hidden hides by default, but setting +Hidden1 to make it explicitly hidden
+    keepOnTopCheck.Value := false ; False by default - This isn't a saved setting, just a temporary preference
+    keepOnTopCheck.OnEvent("Click", (*) => SetSettingsWindowAlwaysOnTop(keepOnTopCheck.Value))
+    labelKeepOnTopCheckTooltipText := "Keep this window always on top of other windows.`nGood for keeping it visible while testing settings.`n`n(Note: This checkbox setting is not saved.)"
+    AddTooltipToControl(hTT, keepOnTopCheck.Hwnd, labelKeepOnTopCheckTooltipText)
+
     ; Add buttons at the bottom - See positioning cheatsheet: https://www.reddit.com/r/AutoHotkey/comments/1968fq0/a_cheatsheet_for_building_guis_using_relative/
     buttonsY := "y+20"
     ; Reset button
@@ -817,10 +830,15 @@ ShowSettingsGUI(*) {
     helpBtn := settingsGui.AddButton("x+10 w70", "Help")
     helpBtn.OnEvent("Click", ShowHelpWindow)
 
-
-    ; Set variables to track when certain settings are changed for special handling
-    UIAccessInitialValue := g_settings.enableUIAccess
-    HotkeyInitialValue := g_settings.dialogMenuHotkey
+    ; Set variables to track when certain settings are changed for special handling.
+    ; Setting this as a function so it can be called again if saving settings without closing the window
+    UIAccessInitialValue := ""
+    HotkeyInitialValue := ""
+    RecordInitialValuesFromGlobalSettings() {
+        UIAccessInitialValue := g_settings.enableUIAccess
+        HotkeyInitialValue := g_settings.dialogMenuHotkey
+    }
+    RecordInitialValuesFromGlobalSettings()
     
     ; Show the GUI
     settingsGui.Show()
@@ -847,7 +865,6 @@ ShowSettingsGUI(*) {
         g_settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
         g_settings.enableUIAccess := UIAccessCheck.Value
         
-        ; Save to settings file
         SaveSettingsToFile()
         
         ; When UI Access goes from enabled to disabled, the user must manually close and re-run the script
@@ -860,11 +877,18 @@ ShowSettingsGUI(*) {
                 Reload
             }
         }
-        ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
 
+        ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
+       
         ; Disable the original hotkey by passing in the previous hotkey string
         UpdateHotkeyFromSettings(HotkeyInitialValue)
-        settingsGui.Destroy()
+
+        ; At this point all settings have been saved and applied
+        RecordInitialValuesFromGlobalSettings()
+
+        if (keepOpenCheck.Value = false) {
+            settingsGui.Destroy()
+        }
     }
     
     GuiResize(thisGui, minMax, width, height) {
@@ -891,6 +915,25 @@ ShowSettingsGUI(*) {
                     }
                     ctrl.Redraw()
                 }
+            }
+        }
+    }
+
+    SetSettingsWindowAlwaysOnTop(checkValue) {
+        if (checkValue) {
+            settingsGui.Opt("+AlwaysOnTop")
+        } else {
+            settingsGui.Opt("-AlwaysOnTop")
+        }
+    }
+
+    ToggleAlwaysOnTopCheckVisibility(keepOpenCheckValue) {
+        if (keepOpenCheckValue) {
+            keepOnTopCheck.Visible := true
+        } else {
+            ; Hide the checkbox but only if it's not checked
+            if !keepOnTopCheck.Value {
+                keepOnTopCheck.Visible := false
             }
         }
     }
