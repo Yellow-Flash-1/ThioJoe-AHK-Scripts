@@ -35,7 +35,7 @@ class pathSelector_DefaultSettings {
 }
 
 ; System Tray Menu Options
-pathSelector_SetupSystemTray(
+PathSelector_SetupSystemTray(
     settingsMenuItemName := "Path Selector Settings   ",   ; Added spaces to the name or else it can get cut off when default menu item
     showSettingsTrayMenuItem := true,   ; Show the settings menu item in the system tray menu. If set to false none of these other settings matter
     forcePositionIndex := false,        ; If this is false, the position index will be increased by 1 if the script is running as included in another script (so it shows up after the parent script's menu items)
@@ -74,7 +74,7 @@ g_PathSelector_SettingsFileInfo.appDataDirectoryPath := A_AppData "\" g_PathSele
 g_PathSelector_SettingsFileInfo.appDataFilePath := g_PathSelector_SettingsFileInfo.appDataDirectoryPath "\" g_PathSelector_SettingsFileInfo.fileName
 g_PathSelector_SettingsFileInfo.usingSettingsFile := false
 
-InitializeSettings()
+InitializePathSelectorSettings()
 ; If the script is running standalone and UI access is installed...
 ; Reload self with UI Access for the script - Allows usage within elevated windows protected by UAC without running the script as admin
 ; See Docs: https://www.autohotkey.com/docs/v1/FAQ.htm#uac
@@ -83,7 +83,7 @@ if (g_PathSelector_Settings.enableUIAccess = true) and !A_IsCompiled and ThisScr
     ExitApp
 }
 
-UpdateHotkeyFromSettings()
+PathSelector_UpdateHotkeyFromSettings()
 
 ; ---------------------------------------- INITIALIZATION FUNCTIONS  ----------------------------------------------
 
@@ -91,7 +91,7 @@ DisplayDialogPathMenuCallback(ThisHotkey) {
     DisplayDialogPathMenu()
 }
 
-UpdateHotkeyFromSettings(previousHotkeyString := "") {
+PathSelector_UpdateHotkeyFromSettings(previousHotkeyString := "") {
     ; If the new hotkey is the same as before, return. Otherwise it will disable itself and re-enable itself unnecessarily
     if (g_PathSelector_Settings.dialogMenuHotkey = previousHotkeyString)
         return
@@ -113,7 +113,7 @@ UpdateHotkeyFromSettings(previousHotkeyString := "") {
     }
 }
 
-InitializeSettings() {
+InitializePathSelectorSettings() {
     global
 
     ; ---------- Conditional Default Settings ----------
@@ -131,7 +131,7 @@ InitializeSettings() {
     }
 
     try {
-        LoadSettingsFromSettingsFilePath(g_PathSelector_SettingsFileInfo.filePath)
+        PathSelector_LoadSettingsFromSettingsFilePath(g_PathSelector_SettingsFileInfo.filePath)
     }
     catch Error as err {
         MsgBox("Error reading settings file: " err.Message "`n`nUsing default settings.")
@@ -160,8 +160,54 @@ ThisScriptRunningStandalone() {
 
 
 ; Navigate to the chosen path
-f_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
-    global
+PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
+
+    NavigateDialog(path, windowHwnd, dialogInfo) {
+        if (dialogInfo.Type = "HasEditControl") {
+            ; Send the path to the edit control text box using SendMessage
+            DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
+            ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
+            DllCall("SendMessage", "Ptr", windowHwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
+                   
+        } else if (dialogInfo.Type = "FolderBrowserDialog") {
+            NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
+        }
+    }
+
+    DetectDialogType(hwnd) {
+        ; Wait for the dialog window with class #32770 to be active
+        if !WinWaitActive("ahk_class #32770",, 10) {
+            return 0
+        }
+    
+        ; try {
+        ;     modernDialogControlHwnd := CheckIfModernDialog(hwnd)
+        ;     if modernDialogControlHwnd != 0 {
+        ;         return {Type: "ModernDialog", ControlHwnd: modernDialogControlHwnd}
+        ;     }
+        ; } catch {
+        ;     ; Error occurred while checking for modern dialog
+        ;     return 0
+        ; }
+        
+        ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
+        try {
+            hFileNameEdit := ControlGetHwnd("Edit1", "ahk_class #32770")
+            return {Type: "HasEditControl", ControlHwnd: hFileNameEdit}
+        } catch {
+            ; Try to get the handle of the TreeView control
+            try {
+                hTreeView := ControlGetHwnd("SysTreeView321", "ahk_class #32770")
+                return {Type: "FolderBrowserDialog", ControlHwnd: hTreeView}
+            } catch {
+                ; Neither control found
+                return 0
+            }
+        }
+    }
+
+    ; ------------------------------------------------------------------------
+
     ; Strip any prefix markers from the path
     f_path := RegExReplace(A_ThisMenuItem, "^[►▶→•\s]+\s*", "")
     ; Strip any custom suffix if present
@@ -197,13 +243,8 @@ f_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
     }
 }
 
-RemoveToolTip() {
-    SetTimer(RemoveToolTip, 0)
-    ToolTip()
-}
-
 ; Get Explorer paths
-getAllExplorerPaths() {
+GetAllExplorerPaths() {
     paths := []
     explorerHwnds := WinGetList("ahk_class CabinetWClass")
     shell := ComObject("Shell.Application")
@@ -398,7 +439,7 @@ DisplayDialogPathMenu() {
         ; First add paths from active lister
         for pathObj in paths {
             if (pathObj.isActiveLister) {
-                CurrentLocations.Add("Opus Window " A_Index " (Active)", f_Navigate)
+                CurrentLocations.Add("Opus Window " A_Index " (Active)", PathSelector_Navigate)
                 CurrentLocations.Disable("Opus Window " A_Index " (Active)")
                 
                 ; Add all paths for this lister
@@ -411,7 +452,7 @@ DisplayDialogPathMenu() {
                     else
                         menuText := g_PathSelector_Settings.standardEntryPrefix menuText
                     
-                    CurrentLocations.Add(menuText, f_Navigate)
+                    CurrentLocations.Add(menuText, PathSelector_Navigate)
                     CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                     hasItems := true
                 }
@@ -425,7 +466,7 @@ DisplayDialogPathMenu() {
         ; Then add remaining Directory Opus listers
         windowNum := 2
         for lister, listerPaths in listers {
-            CurrentLocations.Add("Opus Window " windowNum, f_Navigate)
+            CurrentLocations.Add("Opus Window " windowNum, PathSelector_Navigate)
             CurrentLocations.Disable("Opus Window " windowNum)
             
             ; Add all paths for this lister
@@ -437,7 +478,7 @@ DisplayDialogPathMenu() {
                 else
                     menuText := g_PathSelector_Settings.standardEntryPrefix menuText
                     
-                CurrentLocations.Add(menuText, f_Navigate)
+                CurrentLocations.Add(menuText, PathSelector_Navigate)
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
             }
@@ -448,7 +489,7 @@ DisplayDialogPathMenu() {
 
     ; Get Explorer paths
     ; Get Explorer paths
-    explorerPaths := getAllExplorerPaths()
+    explorerPaths := GetAllExplorerPaths()
 
     ; Group paths by window handle (Hwnd)
     windows := Map()
@@ -466,7 +507,7 @@ DisplayDialogPathMenu() {
 
         windowNum := 1
         for hwnd, windowPaths in windows {
-            CurrentLocations.Add("Explorer Window " windowNum, f_Navigate)
+            CurrentLocations.Add("Explorer Window " windowNum, PathSelector_Navigate)
             CurrentLocations.Disable("Explorer Window " windowNum)
 
             for pathObj in windowPaths {
@@ -477,7 +518,7 @@ DisplayDialogPathMenu() {
                 else
                     menuText := g_PathSelector_Settings.standardEntryPrefix menuText
 
-                CurrentLocations.Add(menuText, f_Navigate)
+                CurrentLocations.Add(menuText, PathSelector_Navigate)
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
             }
@@ -493,7 +534,7 @@ DisplayDialogPathMenu() {
             CurrentLocations.Add()
         
         menuText := g_PathSelector_Settings.standardEntryPrefix A_Clipboard
-        CurrentLocations.Add(menuText, f_Navigate)
+        CurrentLocations.Add(menuText, PathSelector_Navigate)
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         hasItems := true
     } else if g_PathSelector_Settings.alwaysShowClipboardmenuItem = true {
@@ -502,9 +543,14 @@ DisplayDialogPathMenu() {
             CurrentLocations.Add()
 
         menuText := g_PathSelector_Settings.standardEntryPrefix "Paste path from clipboard"
-        CurrentLocations.Add(menuText, f_Navigate) ; Still need the function even if it's disabled
+        CurrentLocations.Add(menuText, PathSelector_Navigate) ; Still need the function even if it's disabled
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         CurrentLocations.Disable(menuText)
+    }
+
+    RemoveToolTip() {
+        SetTimer(RemoveToolTip, 0)
+        ToolTip()
     }
 
     ; Show menu if we have items, otherwise show tooltip
@@ -519,61 +565,31 @@ DisplayDialogPathMenu() {
     CurrentLocations := ""
 }
 
-ShowPathEntryBox(*) {
-    path := InputBox("Enter a path to navigate to", "Path", "w300 h100")
+; ShowPathEntryBox(*) {
+;     path := InputBox("Enter a path to navigate to", "Path", "w300 h100")
     
-    ; Check if user cancelled the InputBox
-    if (path.Result = "Cancel")
-        return ""
+;     ; Check if user cancelled the InputBox
+;     if (path.Result = "Cancel")
+;         return ""
 
-    ; Trim whitespace
-    trimmedPath := Trim(path.Value)
+;     ; Trim whitespace
+;     trimmedPath := Trim(path.Value)
         
-    ; Check if the input is empty
-    if (trimmedPath = "")
-        return ""
+;     ; Check if the input is empty
+;     if (trimmedPath = "")
+;         return ""
 
-    ; Use Windows API to check if the directory exists. Also works for UNC paths
-    if DllCall("Shlwapi\PathIsDirectoryW", "Str", path) = 0 {
-        MsgBox("Invalid path format. Please enter a valid path.")
-        return ""
-    }
+;     ; Use Windows API to check if the directory exists. Also works for UNC paths
+;     if DllCall("Shlwapi\PathIsDirectoryW", "Str", path) = 0 {
+;         MsgBox("Invalid path format. Please enter a valid path.")
+;         return ""
+;     }
 
-    ; Navigate to the chosen path
-    f_Navigate(trimmedPath)
-}
+;     ; Navigate to the chosen path
+;     f_Navigate(trimmedPath)
+; }
 
-DetectDialogType(hwnd) {
-    ; Wait for the dialog window with class #32770 to be active
-    if !WinWaitActive("ahk_class #32770",, 10) {
-        return 0
-    }
 
-    ; try {
-    ;     modernDialogControlHwnd := CheckIfModernDialog(hwnd)
-    ;     if modernDialogControlHwnd != 0 {
-    ;         return {Type: "ModernDialog", ControlHwnd: modernDialogControlHwnd}
-    ;     }
-    ; } catch {
-    ;     ; Error occurred while checking for modern dialog
-    ;     return 0
-    ; }
-    
-    ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
-    try {
-        hFileNameEdit := ControlGetHwnd("Edit1", "ahk_class #32770")
-        return {Type: "HasEditControl", ControlHwnd: hFileNameEdit}
-    } catch {
-        ; Try to get the handle of the TreeView control
-        try {
-            hTreeView := ControlGetHwnd("SysTreeView321", "ahk_class #32770")
-            return {Type: "FolderBrowserDialog", ControlHwnd: hTreeView}
-        } catch {
-            ; Neither control found
-            return 0
-        }
-    }
-}
 
 ; CheckIfModernDialog(windowHwnd) {
 ;     testList := Object()
@@ -612,20 +628,41 @@ DetectDialogType(hwnd) {
 ; }
 
 ; Function to navigate to the specified path
-NavigateDialog(path, windowHwnd, dialogInfo) {
 
-    if (dialogInfo.Type = "HasEditControl") {
-        ; Send the path to the edit control text box using SendMessage
-        DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
-        ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
-        DllCall("SendMessage", "Ptr", windowHwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
-               
-    } else if (dialogInfo.Type = "FolderBrowserDialog") {
-        NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
-    }
-}
 
 NavigateLegacyFolderDialog(path, hTV) {
+    ; Helper function to navigate to a node with the given text under the given parent item
+    NavigateToNode(treeView, parentItem, nodeText, isDriveLetter := false) {
+        ; Helper function to escape special regex characters in node text
+        RegExEscape(str) {
+            static chars := "[\^\$\.\|\?\*\+\(\)\{\}\[\]\\]"
+            return RegExReplace(str, chars, "\$0")
+        }
+
+        treeView.Expand(parentItem, true)
+        hItem := treeView.GetChild(parentItem)
+        while (hItem) {
+            itemText := treeView.GetText(hItem)
+            if (isDriveLetter) {
+                ; Special handling for drive letters. Look for them in parentheses, because they might show with name like "Primary (C:)"
+                if (itemText ~= "i)\(" . RegExEscape(nodeText) . "\)") {
+                    ; Found the drive
+                    return hItem
+                }
+            } else {
+                ; Regular matching for other nodes
+                if (itemText ~= "i)^" . RegExEscape(nodeText) . "(\s|$)") {
+                    ; Found the item
+                    return hItem
+                }
+            }
+            hItem := treeView.GetNext(hItem)
+        }
+        return 0
+    }
+
+    ; -------------------------------------------------------------
+
     ; Initialize variables
     networkPath := ""
     driveLetter := ""
@@ -703,42 +740,14 @@ NavigateLegacyFolderDialog(path, hTV) {
     ; Send("{Enter}")
 }
 
-; Helper function to navigate to a node with the given text under the given parent item
-NavigateToNode(treeView, parentItem, nodeText, isDriveLetter := false) {
-    treeView.Expand(parentItem, true)
-    hItem := treeView.GetChild(parentItem)
-    while (hItem) {
-        itemText := treeView.GetText(hItem)
-        if (isDriveLetter) {
-            ; Special handling for drive letters. Look for them in parentheses, because they might show with name like "Primary (C:)"
-            if (itemText ~= "i)\(" . RegExEscape(nodeText) . "\)") {
-                ; Found the drive
-                return hItem
-            }
-        } else {
-            ; Regular matching for other nodes
-            if (itemText ~= "i)^" . RegExEscape(nodeText) . "(\s|$)") {
-                ; Found the item
-                return hItem
-            }
-        }
-        hItem := treeView.GetNext(hItem)
-    }
-    return 0
-}
 
-; Helper function to escape special regex characters in node text
-RegExEscape(str) {
-    static chars := "[\^\$\.\|\?\*\+\(\)\{\}\[\]\\]"
-    return RegExReplace(str, chars, "\$0")
-}
 
 ; ----------------------------------------------------------------------------------------------
 ; ---------------------------------------- GUI-RELATED  ----------------------------------------
 ; ----------------------------------------------------------------------------------------------
 
 ; Function to show the settings GUI
-ShowSettingsGUI(*) {
+ShowPathSelectorSettingsGUI(*) {
     ; Create the settings window
     settingsGui := Gui("+Resize", g_pathSelector_programName " - Settings")
     settingsGui.OnEvent("Size", GuiResize)
@@ -852,10 +861,10 @@ ShowSettingsGUI(*) {
     AddTooltipToControl(hTT, saveBtn.Hwnd, labelButtonSaveTooltipText)
     ; Help button
     helpBtn := settingsGui.AddButton("x+10 w70", "Help")
-    helpBtn.OnEvent("Click", ShowHelpWindow)
+    helpBtn.OnEvent("Click", ShowPathSelectorHelpWindow)
     ; Smaller About button above the help button
     aboutBtn := settingsGui.AddButton("xp+0 yp-25 w70 h25", "About") ; These positions aren't right, but we'll fix them in the resize function
-    aboutBtn.OnEvent("Click", ShowAboutWindow)
+    aboutBtn.OnEvent("Click", ShowPathSelectorAboutWindow)
 
     ; Set variables to track when certain settings are changed for special handling.
     ; Setting this as a function so it can be called again if saving settings without closing the window
@@ -892,7 +901,7 @@ ShowSettingsGUI(*) {
         g_PathSelector_Settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
         g_PathSelector_Settings.enableUIAccess := UIAccessCheck.Value
         
-        SaveSettingsToFile()
+        PathSelector_SaveSettingsToFile()
         
         ; When UI Access goes from enabled to disabled, the user must manually close and re-run the script
         if (UIAccessInitialValue = true && UIAccessCheck.Value = false) {
@@ -908,7 +917,7 @@ ShowSettingsGUI(*) {
         ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
        
         ; Disable the original hotkey by passing in the previous hotkey string
-        UpdateHotkeyFromSettings(HotkeyInitialValue)
+        PathSelector_UpdateHotkeyFromSettings(HotkeyInitialValue)
 
         ; At this point all settings have been saved and applied
         RecordInitialValuesFromGlobalSettings()
@@ -976,7 +985,7 @@ ShowSettingsGUI(*) {
     }
 }
 
-ShowHelpWindow(*) {
+ShowPathSelectorHelpWindow(*) {
     global 
     ; Added MinSize to prevent window from becoming too small
     helpGui := Gui("+Resize +MinSize400x300", g_pathSelector_programName " - Help & Tips")
@@ -1141,7 +1150,7 @@ BrowseForDopusRT(editControl) {
         editControl.Value := selectedFile
 }
 
-SaveSettingsToFile() {
+PathSelector_SaveSettingsToFile() {
     global
     SaveToPath(settingsFileDir){
         settingsFilePath := settingsFileDir "\" g_PathSelector_SettingsFileInfo.fileName
@@ -1192,7 +1201,7 @@ SaveSettingsToFile() {
     
 }
 
-LoadSettingsFromSettingsFilePath(settingsFilePath){
+PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath){
     if FileExist(settingsFilePath) {
         ; Load each setting from the INI file
         g_PathSelector_Settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", pathSelector_DefaultSettings.dialogMenuHotkey)
@@ -1218,12 +1227,12 @@ LoadSettingsFromSettingsFilePath(settingsFilePath){
     }
 }
 
-ShowAboutWindow(*) {
+ShowPathSelectorAboutWindow(*) {
     MsgBox(g_pathSelector_programName "`nVersion: " g_pathSelector_version "`n`nAuthor: ThioJoe`n`nProject Repository: https://github.com/ThioJoe/AHK-Scripts", "About", "Iconi")
 }
 
 ; ---------------------------- SYSTEM TRAY MENU CUSTOMIZATION ----------------------------
-pathSelector_SetupSystemTray(settingsMenuItemName, showSettingsTrayMenuItem := true, forcePositionIndex := false, positionIndex := 1, addSeparatorBefore := false, addSeparatorAfter := true, alwaysDefaultItem := false) {
+PathSelector_SetupSystemTray(settingsMenuItemName, showSettingsTrayMenuItem := true, forcePositionIndex := false, positionIndex := 1, addSeparatorBefore := false, addSeparatorAfter := true, alwaysDefaultItem := false) {
     if (!showSettingsTrayMenuItem) {
         return
     }
@@ -1243,7 +1252,7 @@ pathSelector_SetupSystemTray(settingsMenuItemName, showSettingsTrayMenuItem := t
         positionIndex := positionIndex + 1
     }
 
-    A_TrayMenu.Insert(positionIndex . "&" , settingsMenuItemName, ShowSettingsGUI)
+    A_TrayMenu.Insert(positionIndex . "&" , settingsMenuItemName, ShowPathSelectorSettingsGUI)
 
     if (addSeparatorAfter){
         A_TrayMenu.Insert((positionIndex + 1) . "&", "")  ; Separator - Comment/Uncomment if you want to add a separator or not
