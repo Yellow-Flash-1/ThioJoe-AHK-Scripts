@@ -37,11 +37,16 @@ class DefaultSettings {
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
 ; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
-;       With only one semicolon it actually is active. With two semicolons it is truly commented out.
-;       The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
-;          > Be aware enabling UI Access for compiled would require the script to be signed to work properly and placed in a trusted location
-; Recommended not to uncomment this even if compiling unless you have a reason or it might not work as expected
+;    - With only one semicolon it actually is active. With two semicolons it is truly commented out.
+;    - The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
+;    - Be aware enabling UI Access for compiled would require the script to be signed to work properly and then placed in a trusted location
+;    - If you enable the UI Access argument and DON'T sign it, Windows won't run it and will give an error message
+;         > Therefore not recommended to set the last argument to '1' unless you will self-sign the exe or have a trusted certificate
+;    - If you do sign it, it will still run even if not in a trusted location, but it just won't work in elevated dialog Windows
+; Note: Though this may have UI Access argument as 0, for my releases I set it to 1 and sign the exe
 ;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 0
+
+; Globals about the program
 global g_version := "1.0.0.0"
 global g_programName := "Explorer Dialog Path Selector"
 
@@ -732,7 +737,7 @@ ShowSettingsGUI(*) {
     ; Add controls - using current values from global variables
     labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Menu Hotkey:")
     hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.dialogMenuHotkey)
-    hotkeyEdit.SetFont("s10", "Consolas")
+    hotkeyEdit.SetFont("s12", "Consolas")
     labelhotkeyTooltipText := "Enter the key or key combination that will trigger the dialog menu (Using AutoHotkey V2 syntax)`n`nSee `"Help`" menu for link to documentation about key names."
     labelhotkeyTooltipText .= "`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
     AddTooltipToControl(hTT, labelHotkey.Hwnd, labelhotkeyTooltipText)
@@ -836,6 +841,9 @@ ShowSettingsGUI(*) {
     ; Help button
     helpBtn := settingsGui.AddButton("x+10 w70", "Help")
     helpBtn.OnEvent("Click", ShowHelpWindow)
+    ; Smaller About button above the help button
+    aboutBtn := settingsGui.AddButton("xp+0 yp-25 w70 h25", "About") ; These positions aren't right, but we'll fix them in the resize function
+    aboutBtn.OnEvent("Click", ShowAboutWindow)
 
     ; Set variables to track when certain settings are changed for special handling.
     ; Setting this as a function so it can be called again if saving settings without closing the window
@@ -924,7 +932,10 @@ ShowSettingsGUI(*) {
                         ctrl.Move(width - 70)  ; Anchor Browse button to right side window edge
                     } else if ctrl.Text = "Help" {
                         ctrl.Move(width-85, height-45)  ; Right align Help button with some margin
-                    } else{
+                    } else if ctrl.Text = "About" {
+                        ; Align it with the Help button and go above it
+                        ctrl.Move(width-85, height-75)
+                    } else {
                         ctrl.Move(, height-45)  ; Bottom align buttons with 40px margin from bottom
                     }
                     ctrl.Redraw()
@@ -1199,7 +1210,6 @@ ShowAboutWindow(*) {
     MsgBox(g_programName "`nVersion: " g_version "`n`nAuthor: ThioJoe`n`nProject Repository: https://github.com/ThioJoe/AHK-Scripts", "About", "Iconi")
 }
 
-; Add a tray menu item to show the settings GUI
-A_TrayMenu.Insert("2&", "")  ; Separator
+; Add a tray menu item to show the settings GUI. Use the & symbol to indicate the index position of the menu item
+A_TrayMenu.Insert("2&", "")  ; Separator - Comment/Uncomment if you want to add a separator or not
 A_TrayMenu.Insert("3&", "Path Selector Settings", ShowSettingsGUI)
-A_TrayMenu.Insert("4&", "Path selector About", ShowAboutWindow)
