@@ -15,7 +15,7 @@
 ;       The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
 ;          > Be aware enabling UI Access for compiled would require the script to be signed to work properly and placed in a trusted location
 ; Recommended not to uncomment this even if compiling unless you have a reason or it might not work as expected
-;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 1
+;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 0
 
 #Requires AutoHotkey v2.0
 #SingleInstance force
@@ -109,7 +109,7 @@ InitializeSettings() {
     
     ; ----- Special handling for certain settings -----
     ; For UI Access, always disable if not running standalone
-    if !ThisScriptRunningStandalone() {
+    if !ThisScriptRunningStandalone() or A_IsCompiled{
         g_settings.enableUIAccess := false
     }
 
@@ -783,7 +783,7 @@ ShowSettingsGUI(*) {
     UIAccessCheck := settingsGui.AddCheckbox("xm y+10", "Enable UI Access")
     UIAccessCheck.Value := g_settings.enableUIAccess
     labelUIAccessCheckTooltipText := ""
-    if !ThisScriptRunningStandalone() {
+    if !ThisScriptRunningStandalone() or A_IsCompiled {
         UIAccessCheck.Value := 0
         UIAccessCheck.Enabled := 0
 
@@ -793,7 +793,14 @@ ShowSettingsGUI(*) {
         UIAccessCheck.GetPos(&x, &y, &w, &h)
         tooltipOverlay := settingsGui.AddText("x" x " y" y " w" w " h" h " +BackgroundTrans", "")
 
-        labelUIAccessCheckTooltipText := "This script appears to be running as being included by another script. You should enable UI Access via the parent script instead."
+        if A_IsCompiled {
+            labelUIAccessCheckTooltipText := "UI Access allows the script to work on dialogs run by elevated processes, without having to run as Admin itself."
+            labelUIAccessCheckTooltipText .= "`nHowever this setting does not apply for the compiled Exe version of the script."
+            labelUIAccessCheckTooltipText .= "`n`nInstead, you must put the exe in a `"trusted`" Windows location such as the `"C:\Program Files\...`" directory."
+            labelUIAccessCheckTooltipText .= "`nYou do NOT need to run the exe as Admin for this to work."
+        } else {
+            labelUIAccessCheckTooltipText := "This script appears to be running as being included by another script. You should enable UI Access via the parent script instead."
+        }
         AddTooltipToControl(hTT, tooltipOverlay.Hwnd, labelUIAccessCheckTooltipText)
     } else {
         labelUIAccessCheckTooltipText := "Enable `"UI Access`" to allow the script to run in elevated windows protected by UAC without running as admin."
