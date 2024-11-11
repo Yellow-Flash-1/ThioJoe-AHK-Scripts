@@ -8,6 +8,15 @@
 ; Set the dialogMenuHotkey variable to the hotkey you want to use to show the menu
 ; Edit any configuration variables as needed
 
+; ---------------------------------------------------------------------------------------------------
+
+; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
+;       With only one semicolon it actually is active. With two semicolons it is truly commented out.
+;       The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
+;          > Be aware enabling UI Access for compiled would require the script to be signed to work properly and placed in a trusted location
+; Recommended not to uncomment this even if compiling unless you have a reason or it might not work as expected
+;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 1
+
 #Requires AutoHotkey v2.0
 #SingleInstance force
 SetWorkingDir(A_ScriptDir)
@@ -36,9 +45,14 @@ class DefaultSettings {
 
 ; Global variable to hold current settings
 global g_settings := {}
-global settingsFileName := "ExplorerDialogPathSelector-Settings.ini"
-settingsFileDirectory := A_ScriptDir
-global settingsFilePath := settingsFileDirectory "\" settingsFileName
+
+; Default settings file path is next to the script. If permissions fail, will try AppData
+global g_settingsFileName := "ExplorerDialogPathSelector-Settings.ini"
+global g_settingsFileDirectory := A_ScriptDir
+global g_settingsFilePath := g_settingsFileDirectory "\" g_settingsFileName
+g_appDataDirName := "Explorer-Dialog-Path-Selector"
+global g_settingsFileAppDataDirectory := A_AppData "\" g_appDataDirName
+global g_settingsFileAppDataPath := g_settingsFileAppDataDirectory "\" g_settingsFileName
 
 InitializeSettings()
 ; If the script is running standalone and UI access is installed...
@@ -76,28 +90,15 @@ UpdateHotkeyFromSettings(previousHotkeyString := "") {
 }
 
 InitializeSettings() {
+    global
+    ; If the settings file isn't in the current directory, but it is in AppData, use the AppData path
+    if (!FileExist(g_settingsFilePath)) and FileExist(g_settingsFileAppDataPath) {
+        g_settingsFilePath := g_settingsFileAppDataPath
+        g_settingsFileDirectory := g_settingsFileAppDataDirectory
+    }
+
     try {
-        if FileExist(settingsFilePath) {
-            ; Load each setting from the INI file
-            g_settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", DefaultSettings.dialogMenuHotkey)
-            g_settings.dopusRTPath := IniRead(settingsFilePath, "Settings", "dopusRTPath", DefaultSettings.dopusRTPath)
-            g_settings.activeTabPrefix := IniRead(settingsFilePath, "Settings", "activeTabPrefix", DefaultSettings.activeTabPrefix)
-            g_settings.activeTabSuffix := IniRead(settingsFilePath, "Settings", "activeTabSuffix", DefaultSettings.activeTabSuffix)
-            g_settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", DefaultSettings.standardEntryPrefix)
-            g_settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", DefaultSettings.enableExplorerDialogMenuDebug)
-            g_settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", DefaultSettings.alwaysShowClipboardmenuItem)
-            g_settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", DefaultSettings.enableUIAccess)
-            
-            ; Convert string boolean values to actual booleans
-            g_settings.enableExplorerDialogMenuDebug := g_settings.enableExplorerDialogMenuDebug = "1"
-            g_settings.alwaysShowClipboardmenuItem := g_settings.alwaysShowClipboardmenuItem = "1"
-            g_settings.enableUIAccess := g_settings.enableUIAccess = "1"
-        } else {
-            ; If no settings file exists, use defaults
-            for k, v in DefaultSettings.OwnProps() {
-                g_settings.%k% := DefaultSettings.%k%
-            }
-        }
+        LoadSettingsFromSettingsFilePath(g_settingsFilePath)
     }
     catch Error as err {
         MsgBox("Error reading settings file: " err.Message "`n`nUsing default settings.")
@@ -105,15 +106,38 @@ InitializeSettings() {
             g_settings.%k% := DefaultSettings.%k%
         }
     }
-
+    
     ; ----- Special handling for certain settings -----
-
     ; For UI Access, always disable if not running standalone
     if !ThisScriptRunningStandalone() {
         g_settings.enableUIAccess := false
     }
 
     return
+}
+
+LoadSettingsFromSettingsFilePath(settingsFilePath){
+    if FileExist(settingsFilePath) {
+        ; Load each setting from the INI file
+        g_settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", DefaultSettings.dialogMenuHotkey)
+        g_settings.dopusRTPath := IniRead(settingsFilePath, "Settings", "dopusRTPath", DefaultSettings.dopusRTPath)
+        g_settings.activeTabPrefix := IniRead(settingsFilePath, "Settings", "activeTabPrefix", DefaultSettings.activeTabPrefix)
+        g_settings.activeTabSuffix := IniRead(settingsFilePath, "Settings", "activeTabSuffix", DefaultSettings.activeTabSuffix)
+        g_settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", DefaultSettings.standardEntryPrefix)
+        g_settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", DefaultSettings.enableExplorerDialogMenuDebug)
+        g_settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", DefaultSettings.alwaysShowClipboardmenuItem)
+        g_settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", DefaultSettings.enableUIAccess)
+        
+        ; Convert string boolean values to actual booleans
+        g_settings.enableExplorerDialogMenuDebug := g_settings.enableExplorerDialogMenuDebug = "1"
+        g_settings.alwaysShowClipboardmenuItem := g_settings.alwaysShowClipboardmenuItem = "1"
+        g_settings.enableUIAccess := g_settings.enableUIAccess = "1"
+    } else {
+        ; If no settings file exists, use defaults
+        for k, v in DefaultSettings.OwnProps() {
+            g_settings.%k% := DefaultSettings.%k%
+        }
+    }
 }
 
 ; ---------------------------------------- UTILITY FUNCTIONS  ----------------------------------------------
@@ -945,22 +969,52 @@ BrowseForDopusRT(editControl) {
 }
 
 SaveSettingsToFile() {
-    fileAlreadyExisted := (FileExist(settingsFilePath) != "") ; If an empty string is returned from FileExist, the file was not found
+    global
+    SaveToPath(settingsFileDir){
+        settingsFilePath := settingsFileDir "\" g_settingsFileName
 
-    ; Save all settings to INI file
-    IniWrite(g_settings.dialogMenuHotkey, settingsFilePath, "Settings", "dialogMenuHotkey")
-    IniWrite(g_settings.dopusRTPath, settingsFilePath, "Settings", "dopusRTPath")
-    ; Put quotes around the prefix and suffix values, otherwise spaces will be trimmed by the OS. The quotes will be removed when the values are read back in.
-    IniWrite('"' g_settings.activeTabPrefix '"', settingsFilePath, "Settings", "activeTabPrefix")
-    IniWrite('"' g_settings.activeTabSuffix '"', settingsFilePath, "Settings", "activeTabSuffix")
-    IniWrite('"' g_settings.standardEntryPrefix '"', settingsFilePath, "Settings", "standardEntryPrefix")
-    IniWrite(g_settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
-    IniWrite(g_settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
-    IniWrite(g_settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
+        fileAlreadyExisted := (FileExist(settingsFilePath) != "") ; If an empty string is returned from FileExist, the file was not found
 
-    if (!fileAlreadyExisted) {
-        MsgBox("Settings saved to file:`n" settingsFileName "`n`n Settings will be automatically loaded from file from now on.", "Settings File Created", "Iconi")
+        ; Create the necessary folders
+        settingsFolder := DirCreate(settingsFileDir)
+
+        ; Save all settings to INI file
+        IniWrite(g_settings.dialogMenuHotkey, settingsFilePath, "Settings", "dialogMenuHotkey")
+        IniWrite(g_settings.dopusRTPath, settingsFilePath, "Settings", "dopusRTPath")
+        ; Put quotes around the prefix and suffix values, otherwise spaces will be trimmed by the OS. The quotes will be removed when the values are read back in.
+        IniWrite('"' g_settings.activeTabPrefix '"', settingsFilePath, "Settings", "activeTabPrefix")
+        IniWrite('"' g_settings.activeTabSuffix '"', settingsFilePath, "Settings", "activeTabSuffix")
+        IniWrite('"' g_settings.standardEntryPrefix '"', settingsFilePath, "Settings", "standardEntryPrefix")
+        IniWrite(g_settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
+        IniWrite(g_settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
+        IniWrite(g_settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
+    
+        if (!fileAlreadyExisted) {
+            MsgBox("Settings saved to file:`n" g_settingsFileName "`n`nIn Location:`n" settingsFilePath "`n`n Settings will be automatically loaded from file from now on.", "Settings File Created", "Iconi")
+        }
     }
+
+    ; Try saving to the current default settings path
+    try {
+        SaveToPath(g_settingsFileDirectory)
+    } catch OSError as oErr {
+        ; If it's error number 5, it's access denied, so try appdata path instead unless it's already the appdata path
+        if (oErr.Number = 5 && g_settingsFilePath != g_settingsFileAppDataPath) {
+            try {
+                ; Try to save to AppData path
+                SaveToPath(g_settingsFileAppDataDirectory)
+                g_settingsFilePath := g_settingsFileAppDataPath ; If successful, update the global settings file path
+                g_settingsFileDirectory := g_settingsFileAppDataDirectory
+            } catch Error as innerErr{
+                MsgBox("Error saving settings to file:`n" innerErr.Message "`n`nTried to save in: `n" g_settingsFileAppDataPath, "Error Saving Settings", "Icon!")
+            }
+        } else if (oErr.Number = 5) {
+            MsgBox("Error saving settings to file:`n" oErr.Message "`n`nTried to save in: `n" g_settingsFilePath, "Error Saving Settings", "Icon!")
+        }
+    } catch {
+        MsgBox("Error saving settings to file:`n" A_LastError "`n`nTried to save in: `n" g_settingsFilePath, "Error Saving Settings", "Icon!")
+    }
+    
 }
 
 ; Add a tray menu item to show the settings GUI
