@@ -34,6 +34,17 @@ class DefaultSettings {
     static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"  ; Path to dopusrt.exe - can be empty to disable Directory Opus integration
 }
 
+; System Tray Menu Options
+pathSelector_SetupSystemTray(
+    settingsMenuItemName := "Path Selector Settings   ",   ; Added spaces to the name or else it can get cut off when default menu item
+    showSettingsTrayMenuItem := true,   ; Show the settings menu item in the system tray menu. If set to false none of these other settings matter
+    forcePositionIndex := false,        ; If this is false, the position index will be increased by 1 if the script is running as included in another script (so it shows up after the parent script's menu items)
+    positionIndex := 1,                 ; Position index for the settings menu item. 1 is the first item, 2 is the second, etc.
+    addSeparatorBefore := false,        ; Add a separator before the settings menu item
+    addSeparatorAfter := true,          ; Add a separator after the settings menu item
+    alwaysDefaultItem := false          ; If true, the path selector menu item will always be the default even if the script is included in another script
+)
+
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
 ; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
@@ -1210,6 +1221,35 @@ ShowAboutWindow(*) {
     MsgBox(g_programName "`nVersion: " g_version "`n`nAuthor: ThioJoe`n`nProject Repository: https://github.com/ThioJoe/AHK-Scripts", "About", "Iconi")
 }
 
-; Add a tray menu item to show the settings GUI. Use the & symbol to indicate the index position of the menu item
-A_TrayMenu.Insert("2&", "")  ; Separator - Comment/Uncomment if you want to add a separator or not
-A_TrayMenu.Insert("3&", "Path Selector Settings", ShowSettingsGUI)
+; ---------------------------- SYSTEM TRAY MENU CUSTOMIZATION ----------------------------
+pathSelector_SetupSystemTray(settingsMenuItemName, showSettingsTrayMenuItem := true, forcePositionIndex := false, positionIndex := 1, addSeparatorBefore := false, addSeparatorAfter := true, alwaysDefaultItem := false) {
+    if (!showSettingsTrayMenuItem) {
+        return
+    }
+
+    if (!forcePositionIndex) {
+        if (ThisScriptRunningStandalone() or A_IsCompiled) {
+            ; If it's running standalone or compiled, use the default position
+        } else {
+            ; If it's running as an included script, put it next so it goes after the parent script's menu items
+            positionIndex := positionIndex + 1
+        }
+    }
+    
+    ; Uses the & symbol to indicate the 1-indexed position of the menu item
+    if (addSeparatorBefore) {
+        A_TrayMenu.Insert(positionIndex . "&", "")  ; Separator
+        positionIndex := positionIndex + 1
+    }
+
+    A_TrayMenu.Insert(positionIndex . "&" , settingsMenuItemName, ShowSettingsGUI)
+
+    if (addSeparatorAfter){
+        A_TrayMenu.Insert((positionIndex + 1) . "&", "")  ; Separator - Comment/Uncomment if you want to add a separator or not
+    }
+    
+    ; If the script is compiled or running standalone, make the settings the default menu item
+    if (ThisScriptRunningStandalone() or A_IsCompiled or alwaysDefaultItem) {
+        A_TrayMenu.Default := settingsMenuItemName
+    }
+}
