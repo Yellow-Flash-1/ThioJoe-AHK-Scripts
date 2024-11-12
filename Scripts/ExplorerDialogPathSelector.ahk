@@ -89,8 +89,8 @@ InitializePathSelectorSettings()
 ; Reload self with UI Access for the script - Allows usage within elevated windows protected by UAC without running the script as admin
 ; See Docs: https://www.autohotkey.com/docs/v1/FAQ.htm#uac
 if (g_PathSelector_Settings.enableUIAccess = true) and !A_IsCompiled and ThisScriptRunningStandalone() and !InStr(A_AhkPath, "_UIA") {
-    Run "*uiAccess " A_ScriptFullPath
-    ExitApp
+    Run("*uiAccess " A_ScriptFullPath)
+    ExitApp()
 }
 
 PathSelector_UpdateHotkey("", "") ; Initialize the hotkey. It will use the hotkey from settings
@@ -189,7 +189,7 @@ PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "
 
     DetectDialogType(hwnd) {
         ; Wait for the dialog window with class #32770 to be active
-        if !WinWaitActive("ahk_class #32770",, 10) {
+        if !WinWaitActive("ahk_class #32770", unset, 10) {
             return 0
         }
         
@@ -316,7 +316,7 @@ GetDOpusPaths() {
     
     try {
         cmd := '"' g_PathSelector_Settings.dopusRTPath '" /info "' tempFile '",paths'
-        RunWait(cmd,, "Hide")
+        RunWait(cmd, unset, "Hide")
         
         if !FileExist(tempFile)
             return []
@@ -846,7 +846,7 @@ ShowPathSelectorSettingsGUI(*) {
             ; When enabling UI Access, we can reload the script to enable it. Ask the user if they want to do this now
             result := MsgBox("UI Access has been enabled. Do you want to restart the script now to apply the changes?", "Settings Saved - Process Restart Required", "YesNo Icon!")
             if (result = "Yes") {
-                Reload
+                Reload()
             }
         }
 
@@ -871,7 +871,7 @@ ShowPathSelectorSettingsGUI(*) {
         for ctrl in thisGui {
             ; For specific control objects
             if ctrl = checkBoxDivider {
-                ctrl.Move(,, width - 30)  ; Set width to fill the window
+                ctrl.Move(unset, unset, width - 30)  ; Set width to fill the window
                 continue
             }
 
@@ -880,9 +880,9 @@ ShowPathSelectorSettingsGUI(*) {
                 if ctrl.Type = "Edit" {
                     ; Leave space for the Browse button if this is the DOpus path edit box
                     if (ctrl.HasProp("ClassNN") && ctrl.ClassNN = "Edit2") {
-                        ctrl.Move(,, width - 220)  ; Leave extra space for Browse button
+                        ctrl.Move(unset, unset, width - 220)  ; Leave extra space for Browse button
                     } else {
-                        ctrl.Move(,, width - 150)  ; Set consistent width for other edit boxes
+                        ctrl.Move(unset, unset, width - 150)  ; Set consistent width for other edit boxes
                     }
                 } else if ctrl.Type = "Button" {
                     if ctrl.Text = "Browse..." {
@@ -893,7 +893,7 @@ ShowPathSelectorSettingsGUI(*) {
                         ; Align it with the Help button and go above it
                         ctrl.Move(width-85, height-75)
                     } else {
-                        ctrl.Move(, height-45)  ; Bottom align buttons with 40px margin from bottom
+                        ctrl.Move(unset, height-45)  ; Bottom align buttons with 40px margin from bottom
                     }
                     ctrl.Redraw()
                 }
@@ -981,14 +981,14 @@ ShowPathSelectorHelpWindow(*) {
         for ctrl in thisGui {
             if ctrl.HasProp("Type") {
                 if ctrl.Type = "Text" or ctrl.Type = "Link" {
-                    ctrl.Move(,, width - 25)  ; Add some margin to the right
+                    ctrl.Move(unset, unset, width - 25)  ; Add some margin to the right
                     ctrl.Redraw()
                 } else if ctrl.Type = "Button" {
                     if ctrl.Text = "Close" {
-                        ctrl.Move(, height - 40)  ; Bottom align Close button with 40px margin from bottom
+                        ctrl.Move(unset, height - 40)  ; Bottom align Close button with 40px margin from bottom
                     }
                 } else if ctrl.Type = "Edit" {
-                    ctrl.Move(,, width - 25)  ; Add some margin to the right
+                    ctrl.Move(unset, unset, width - 25)  ; Add some margin to the right
                 }
             } 
         }
@@ -1079,7 +1079,7 @@ AddTooltipToControl(hTT, controlHwnd, text) {
 }
 
 BrowseForDopusRT(editControl) {
-    selectedFile := FileSelect(3,, "Select dopusrt.exe", "Executable (*.exe)")
+    selectedFile := FileSelect(3, unset, "Select dopusrt.exe", "Executable (*.exe)")
     if selectedFile
         editControl.Value := selectedFile
 }
@@ -1092,7 +1092,7 @@ PathSelector_SaveSettingsToFile() {
         fileAlreadyExisted := (FileExist(settingsFilePath) != "") ; If an empty string is returned from FileExist, the file was not found
 
         ; Create the necessary folders
-        settingsFolder := DirCreate(settingsFileDir)
+        DirCreate(settingsFileDir)
 
         ; Save all settings to INI file
         IniWrite(g_PathSelector_Settings.dialogMenuHotkey, settingsFilePath, "Settings", "dialogMenuHotkey")
