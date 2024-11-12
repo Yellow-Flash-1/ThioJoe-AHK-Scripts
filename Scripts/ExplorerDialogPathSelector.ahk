@@ -35,15 +35,16 @@ class pathSelector_DefaultSettings {
 }
 
 ; System Tray Menu Options
-PathSelector_SetupSystemTray(
-    settingsMenuItemName := "Path Selector Settings   ",   ; Added spaces to the name or else it can get cut off when default menu item
-    showSettingsTrayMenuItem := true,   ; Show the settings menu item in the system tray menu. If set to false none of these other settings matter
-    forcePositionIndex := false,        ; If this is false, the position index will be increased by 1 if the script is running as included in another script (so it shows up after the parent script's menu items)
-    positionIndex := 1,                 ; Position index for the settings menu item. 1 is the first item, 2 is the second, etc.
-    addSeparatorBefore := false,        ; Add a separator before the settings menu item
-    addSeparatorAfter := true,          ; Add a separator after the settings menu item
-    alwaysDefaultItem := false          ; If true, the path selector menu item will always be the default even if the script is included in another script
-)
+pathSelector_SystemTraySettings := {
+    settingsMenuItemName: "Path Selector Settings   ",   ; Added spaces to the name or else it can get cut off when default menu item
+    showSettingsTrayMenuItem: true,   ; Show the settings menu item in the system tray menu. If set to false none of these other settings matter
+    forcePositionIndex: false,        ; If this is false, the position index will be increased by 1 if the script is running as included in another script (so it shows up after the parent script's menu items)
+    positionIndex: 1,                 ; Position index for the settings menu item. 1 is the first item, 2 is the second, etc.
+    addSeparatorBefore: false,        ; Add a separator before the settings menu item
+    addSeparatorAfter: true,          ; Add a separator after the settings menu item
+    alwaysDefaultItem: false          ; If true, the path selector menu item will always be the default even if the script is included in another script
+}
+PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
@@ -83,17 +84,20 @@ if (g_PathSelector_Settings.enableUIAccess = true) and !A_IsCompiled and ThisScr
     ExitApp
 }
 
-PathSelector_UpdateHotkeyFromSettings()
+PathSelector_UpdateHotkey("", "") ; Initialize the hotkey. It will use the hotkey from settings
 
 ; ---------------------------------------- INITIALIZATION FUNCTIONS  ----------------------------------------------
 
-DisplayDialogPathMenuCallback(ThisHotkey) {
-    DisplayDialogPathMenu()
-}
+; Updates the hotkey. If no new hotkey is provided, it will use the hotkey from settings
+PathSelector_UpdateHotkey(newHotkey := "", previousHotkeyString := "") {
+    ; Use the hotkey from settings if no new hotkey is provided
+    if (newHotkey = "") {
+        newHotkey := g_PathSelector_Settings.dialogMenuHotkey
+    }
 
-PathSelector_UpdateHotkeyFromSettings(previousHotkeyString := "") {
     ; If the new hotkey is the same as before, return. Otherwise it will disable itself and re-enable itself unnecessarily
-    if (g_PathSelector_Settings.dialogMenuHotkey = previousHotkeyString)
+    ; By now newHotkey should have a value either from being set or from the settings
+    if (newHotkey = "") or (newHotkey = previousHotkeyString)
         return
 
     if (previousHotkeyString != "") {
@@ -106,10 +110,10 @@ PathSelector_UpdateHotkeyFromSettings(previousHotkeyString := "") {
     }
 
     try {
-        HotKey(g_PathSelector_Settings.dialogMenuHotkey, DisplayDialogPathMenuCallback, "On") ; Include 'On' option to ensure it's enabled if it had been disabled before, like changing the hotkey back again
+        HotKey(newHotkey, DisplayDialogPathMenu, "On") ; Include 'On' option to ensure it's enabled if it had been disabled before, like changing the hotkey back again
     }
     catch Error as hotkeySetErr {
-        MsgBox("Error setting hotkey: " hotkeySetErr.Message "`n`nHotkey Set To:`n" g_PathSelector_Settings.dialogMenuHotkey)
+        MsgBox("Error setting hotkey: " hotkeySetErr.Message "`n`nHotkey Set To:`n" newHotkey)
     }
 }
 
@@ -357,7 +361,7 @@ GetDOpusPaths() {
 }
 
 ; Display the menu
-DisplayDialogPathMenu() {
+DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must accept the hotkey as its first parameter
     global
     if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
     {
@@ -917,7 +921,7 @@ ShowPathSelectorSettingsGUI(*) {
         ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
        
         ; Disable the original hotkey by passing in the previous hotkey string
-        PathSelector_UpdateHotkeyFromSettings(HotkeyInitialValue)
+        PathSelector_UpdateHotkey("", HotkeyInitialValue)
 
         ; At this point all settings have been saved and applied
         RecordInitialValuesFromGlobalSettings()
@@ -1232,7 +1236,15 @@ ShowPathSelectorAboutWindow(*) {
 }
 
 ; ---------------------------- SYSTEM TRAY MENU CUSTOMIZATION ----------------------------
-PathSelector_SetupSystemTray(settingsMenuItemName, showSettingsTrayMenuItem := true, forcePositionIndex := false, positionIndex := 1, addSeparatorBefore := false, addSeparatorAfter := true, alwaysDefaultItem := false) {
+PathSelector_SetupSystemTray(systemTraySettings) {
+    settingsMenuItemName        := systemTraySettings.HasOwnProp("settingsMenuItemName")       ? systemTraySettings.settingsMenuItemName       : "Settings"
+    showSettingsTrayMenuItem    := systemTraySettings.HasOwnProp("showSettingsTrayMenuItem")   ? systemTraySettings.showSettingsTrayMenuItem   : true
+    forcePositionIndex          := systemTraySettings.HasOwnProp("forcePositionIndex")         ? systemTraySettings.forcePositionIndex         : false
+    positionIndex               := systemTraySettings.HasOwnProp("positionIndex")              ? systemTraySettings.positionIndex              : 1
+    addSeparatorBefore          := systemTraySettings.HasOwnProp("addSeparatorBefore")         ? systemTraySettings.addSeparatorBefore         : false
+    addSeparatorAfter           := systemTraySettings.HasOwnProp("addSeparatorAfter")          ? systemTraySettings.addSeparatorAfter          : true
+    alwaysDefaultItem           := systemTraySettings.HasOwnProp("alwaysDefaultItem")          ? systemTraySettings.alwaysDefaultItem          : false
+
     if (!showSettingsTrayMenuItem) {
         return
     }
