@@ -50,19 +50,26 @@ PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
+; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
+; Keep the line pairs together!
+global g_pathSelector_version := "1.0.0.0"
+;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
+
+global g_pathSelector_programName := "Explorer Dialog Path Selector"
+;@Ahk2Exe-Let ProgramName=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
+
 ; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
-;    - With only one semicolon it actually is active. With two semicolons it is truly commented out.
 ;    - The UIAccess option is necessary to allow the script to run in elevated windows protected by UAC without running as admin
 ;    - Be aware enabling UI Access for compiled would require the script to be signed to work properly and then placed in a trusted location
-;    - If you enable the UI Access argument and DON'T sign it, Windows won't run it and will give an error message
-;         > Therefore not recommended to set the last argument to '1' unless you will self-sign the exe or have a trusted certificate
+;    - If you enable the UI Access argument and DON'T sign it, Windows won't run it and will give an error message, therefore not recommended to set the last argument to '1' unless you will self-sign the exe or have a trusted certificate
 ;    - If you do sign it, it will still run even if not in a trusted location, but it just won't work in elevated dialog Windows
 ; Note: Though this may have UI Access argument as 0, for my releases I set it to 1 and sign the exe
-;@Ahk2Exe-UpdateManifest 0, Explorer Dialog Path Selector, 1.0.0.0, 0
-
-; Globals about the program
-global g_pathSelector_version := "1.0.0.0"
-global g_pathSelector_programName := "Explorer Dialog Path Selector"
+;@Ahk2Exe-UpdateManifest 0, %U_ProgramName%, %U_ProgramVersion%, 0
+;@Ahk2Exe-SetVersion %U_ProgramVersion%
+;@Ahk2Exe-SetProductName %U_ProgramName%
+;@Ahk2Exe-SetName %U_ProgramName%
+;@Ahk2Exe-SetCopyright ThioJoe
+;@Ahk2Exe-SetDescription Press a hotkey in an Explorer dialog to show a menu to navigate to paths of other Explorer windows
 
 ; Global variable to hold current settings
 global g_PathSelector_Settings := {}
