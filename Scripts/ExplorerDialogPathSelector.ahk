@@ -46,6 +46,8 @@ pathSelector_SystemTraySettings := {
 }
 PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
+;TraySetIcon("Explorer Dialog Path Selector Icon.ico") ; Uncomment to set a custom icon for the system tray. There is one in the 'Assets' folder of the repo
+
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
 ; Compiler Options for exe manifest - Arguments: RequireAdmin, Name, Version, UIAccess
