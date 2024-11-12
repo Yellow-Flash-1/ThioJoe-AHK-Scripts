@@ -183,16 +183,6 @@ PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "
         if !WinWaitActive("ahk_class #32770",, 10) {
             return 0
         }
-    
-        ; try {
-        ;     modernDialogControlHwnd := CheckIfModernDialog(hwnd)
-        ;     if modernDialogControlHwnd != 0 {
-        ;         return {Type: "ModernDialog", ControlHwnd: modernDialogControlHwnd}
-        ;     }
-        ; } catch {
-        ;     ; Error occurred while checking for modern dialog
-        ;     return 0
-        ; }
         
         ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
         try {
@@ -491,8 +481,6 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         }
     }
 
-    ; Get Explorer paths
-    ; Get Explorer paths
     explorerPaths := GetAllExplorerPaths()
 
     ; Group paths by window handle (Hwnd)
@@ -568,71 +556,6 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     ; Clean up
     CurrentLocations := ""
 }
-
-; ShowPathEntryBox(*) {
-;     path := InputBox("Enter a path to navigate to", "Path", "w300 h100")
-    
-;     ; Check if user cancelled the InputBox
-;     if (path.Result = "Cancel")
-;         return ""
-
-;     ; Trim whitespace
-;     trimmedPath := Trim(path.Value)
-        
-;     ; Check if the input is empty
-;     if (trimmedPath = "")
-;         return ""
-
-;     ; Use Windows API to check if the directory exists. Also works for UNC paths
-;     if DllCall("Shlwapi\PathIsDirectoryW", "Str", path) = 0 {
-;         MsgBox("Invalid path format. Please enter a valid path.")
-;         return ""
-;     }
-
-;     ; Navigate to the chosen path
-;     f_Navigate(trimmedPath)
-; }
-
-
-
-; CheckIfModernDialog(windowHwnd) {
-;     testList := Object()
-;     controls := WinGetControls(windowHwnd)
-;     ; Go through controls that match "ToolbarWindow32*" in the class name and check if their text starts with "Address: "
-;     for controlClassNN in controls {
-;         if (controlClassNN ~= "ToolbarWindow32") {
-;             controlText := ControlGetText(controlClassNN, windowHwnd)
-;             if (controlText ~= "Address: ") {
-;                 ; Get the hwnd of the address bar control
-;                 controlHwnd := ControlGetHwnd(controlClassNN, windowHwnd)
-;                 if (controlHwnd) {
-;                     return controlHwnd
-;                 }
-;             }
-;         }
-;     }
-;     return 0
-; }
-
-; GetAllControlObjects(windowHwnd) {
-;     controls := WinGetControls(windowHwnd)
-;     controlObjects := Map()  ; Changed from Object() to Map()
-;     for controlClassNN in controls {
-;         try {
-;             controlHwnd := ControlGetHwnd(controlClassNN, windowHwnd)
-;             controlText := ControlGetText(controlClassNN, windowHwnd)
-;             ControlID := DllCall("GetDlgCtrlID", "Ptr", controlHwnd, "Int")
-;             controlObjects[controlClassNN] := {Hwnd: controlHwnd, Text: controlText, ControlID: ControlID}
-;         }
-;         catch{
-;             ; Skip this control
-;         }
-;     }
-;     return controlObjects
-; }
-
-; Function to navigate to the specified path
-
 
 NavigateLegacyFolderDialog(path, hTV) {
     ; Helper function to navigate to a node with the given text under the given parent item
@@ -997,8 +920,6 @@ ShowPathSelectorHelpWindow(*) {
     helpGui.OnEvent("Size", GuiResize)
     
     hTT := CreateTooltipControl(helpGui.Hwnd)
-    
-    ; helpGui.AddText("xm y10 w300 h23", g_programName " Help")
     
     ; Settings file info
     settingsFileDescription :=  helpGui.AddText("xm y+10 w300 h20", "Current config file path:") ; Creating this separately so we can set the font
