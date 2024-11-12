@@ -125,8 +125,6 @@ PathSelector_UpdateHotkey(newHotkey := "", previousHotkeyString := "") {
 }
 
 InitializePathSelectorSettings() {
-    global
-
     ; ---------- Conditional Default Settings ----------
     ; Check for the existence of the hard coded default Directory Opus exe path and disable Directory Opus integration if it doesn't exist
     ; This is to prevent the script from trying to use Directory Opus integration if the path is invalid, but still load whatever value from user settings file if there is one
@@ -166,80 +164,6 @@ ThisScriptRunningStandalone() {
 }
 
 ; ------------------------------------ MAIN LOGIC FUNCTIONS ---------------------------------------------------
-
-; Navigate to the chosen path
-PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
-
-    NavigateDialog(path, windowHwnd, dialogInfo) {
-        if (dialogInfo.Type = "HasEditControl") {
-            ; Send the path to the edit control text box using SendMessage
-            DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
-            ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
-            DllCall("SendMessage", "Ptr", windowHwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
-
-        } else if (dialogInfo.Type = "FolderBrowserDialog") {
-            NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
-        }
-    }
-
-    DetectDialogType(hwnd) {
-        ; Wait for the dialog window with class #32770 to be active
-        if !WinWaitActive("ahk_class #32770", unset, 10) {
-            return 0
-        }
-
-        ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
-        try {
-            hFileNameEdit := ControlGetHwnd("Edit1", "ahk_class #32770")
-            return { Type: "HasEditControl", ControlHwnd: hFileNameEdit }
-        } catch {
-            ; Try to get the handle of the TreeView control
-            try {
-                hTreeView := ControlGetHwnd("SysTreeView321", "ahk_class #32770")
-                return { Type: "FolderBrowserDialog", ControlHwnd: hTreeView }
-            } catch {
-                ; Neither control found
-                return 0
-            }
-        }
-    }
-
-    ; ------------------------------------------------------------------------
-
-    ; Strip any prefix markers from the path
-    f_path := RegExReplace(A_ThisMenuItem, "^[►▶→•\s]+\s*", "")
-    ; Strip any custom suffix if present
-    if (g_PathSelector_Settings.activeTabSuffix)
-        f_path := RegExReplace(f_path, "\Q" g_PathSelector_Settings.activeTabSuffix "\E$", "")
-
-    if (f_path = "")
-        return
-
-    if (f_class = "#32770") ; It's a dialog
-    {
-        WinActivate("ahk_id " f_window_id)
-
-        ; Check if it's a legacy dialog
-        if (dialogInfo := DetectDialogType(f_window_id)) {
-            ; Use the legacy navigation approach
-            NavigateDialog(f_path, f_window_id, dialogInfo)
-        } else {
-            ; Use the existing modern dialog approach
-            Send("!{d}")
-            Sleep(50)
-            addressbar := ControlGetFocus("a")
-            ControlSetText(f_path, addressbar, "a")
-            ControlSend("{Enter}", addressbar, "a")
-            ControlFocus("Edit1", "a")
-        }
-        return
-    } else if (f_class = "ConsoleWindowClass") {
-        WinActivate("ahk_id " f_window_id)
-        SetKeyDelay(0)
-        Send("{Esc}pushd " f_path "{Enter}")
-        return
-    }
-}
 
 ; Get Explorer paths
 GetAllExplorerPaths() {
@@ -355,7 +279,6 @@ GetDOpusPaths() {
 
 ; Display the menu
 DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must accept the hotkey as its first parameter
-    global
     if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
         ToolTip("Hotkey Pressed: " A_ThisHotkey)
         Sleep(1000)
@@ -364,14 +287,14 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
     ; Detect windows with error handling
     try {
-        f_window_id := WinGetID("a")
-        f_class := WinGetClass("a")
+        windowID := WinGetID("a")
+        windowClass := WinGetClass("a")
     } catch as err {
         ; If we can't get window info, wait briefly and try once more
         Sleep(25)
         try {
-            f_window_id := WinGetID("a")
-            f_class := WinGetClass("a")
+            windowID := WinGetID("a")
+            windowClass := WinGetClass("a")
         } catch as err {
             if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
                 ToolTip("Unable to detect active window")
@@ -383,7 +306,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     }
 
     ; Verify we got valid window info
-    if (!f_window_id || !f_class) {
+    if (!windowID || !windowClass) {
         if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
             ToolTip("No valid window detected")
             Sleep(1000)
@@ -393,15 +316,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     }
 
     if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
-        ToolTip("Window ID: " f_window_id "`nClass: " f_class)
+        ToolTip("Window ID: " windowID "`nClass: " windowClass)
         Sleep(1000)
         ToolTip()
     }
 
     ; Don't display menu unless it's a dialog or console window
-    if !(f_class ~= "^(?i:#32770|ConsoleWindowClass)$") {
+    if !(windowClass ~= "^(?i:#32770|ConsoleWindowClass)$") {
         if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
-            ToolTip("Window class does not match expected: " f_class)
+            ToolTip("Window class does not match expected: " windowClass)
             Sleep(1000)
             ToolTip()
         }
@@ -430,7 +353,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         ; First add paths from active lister
         for pathObj in paths {
             if (pathObj.isActiveLister) {
-                CurrentLocations.Add("Opus Window " A_Index " (Active)", PathSelector_Navigate)
+                CurrentLocations.Add("Opus Window " A_Index " (Active)", PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
                 CurrentLocations.Disable("Opus Window " A_Index " (Active)")
 
                 ; Add all paths for this lister
@@ -443,7 +366,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                     else
                         menuText := g_PathSelector_Settings.standardEntryPrefix menuText
 
-                    CurrentLocations.Add(menuText, PathSelector_Navigate)
+                    CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
                     CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                     hasItems := true
                 }
@@ -457,7 +380,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         ; Then add remaining Directory Opus listers
         windowNum := 2
         for lister, listerPaths in listers {
-            CurrentLocations.Add("Opus Window " windowNum, PathSelector_Navigate)
+            CurrentLocations.Add("Opus Window " windowNum, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
             CurrentLocations.Disable("Opus Window " windowNum)
 
             ; Add all paths for this lister
@@ -469,7 +392,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                 else
                     menuText := g_PathSelector_Settings.standardEntryPrefix menuText
 
-                CurrentLocations.Add(menuText, PathSelector_Navigate)
+                CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
             }
@@ -496,7 +419,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
         windowNum := 1
         for hwnd, windowPaths in windows {
-            CurrentLocations.Add("Explorer Window " windowNum, PathSelector_Navigate)
+            CurrentLocations.Add("Explorer Window " windowNum, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
             CurrentLocations.Disable("Explorer Window " windowNum)
 
             for pathObj in windowPaths {
@@ -507,7 +430,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                 else
                     menuText := g_PathSelector_Settings.standardEntryPrefix menuText
 
-                CurrentLocations.Add(menuText, PathSelector_Navigate)
+                CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
             }
@@ -523,7 +446,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             CurrentLocations.Add()
 
         menuText := g_PathSelector_Settings.standardEntryPrefix A_Clipboard
-        CurrentLocations.Add(menuText, PathSelector_Navigate)
+        CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         hasItems := true
     } else if g_PathSelector_Settings.alwaysShowClipboardmenuItem = true {
@@ -532,7 +455,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             CurrentLocations.Add()
 
         menuText := g_PathSelector_Settings.standardEntryPrefix "Paste path from clipboard"
-        CurrentLocations.Add(menuText, PathSelector_Navigate) ; Still need the function even if it's disabled
+        CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID)) ; Still need to supply a callback function even though we'll disable it later
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         CurrentLocations.Disable(menuText)
     }
@@ -552,6 +475,81 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
     ; Clean up
     CurrentLocations := ""
+}
+
+; Callback function to navigate to a path. The first 3 parameters are provided by the .Add method of the Menu object
+; The other two parameters must be provided using .Bind when specifying this function as a callback!
+PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, windowClass, windowID) {
+
+    NavigateDialog(path, windowHwnd, dialogInfo) {
+        if (dialogInfo.Type = "HasEditControl") {
+            ; Send the path to the edit control text box using SendMessage
+            DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
+            ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
+            DllCall("SendMessage", "Ptr", windowHwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
+
+        } else if (dialogInfo.Type = "FolderBrowserDialog") {
+            NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
+        }
+    }
+
+    DetectDialogType(hwnd) {
+        ; Wait for the dialog window with class #32770 to be active
+        if !WinWaitActive("ahk_class #32770", unset, 10) {
+            return 0
+        }
+
+        ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
+        try {
+            hFileNameEdit := ControlGetHwnd("Edit1", "ahk_class #32770")
+            return { Type: "HasEditControl", ControlHwnd: hFileNameEdit }
+        } catch {
+            ; Try to get the handle of the TreeView control
+            try {
+                hTreeView := ControlGetHwnd("SysTreeView321", "ahk_class #32770")
+                return { Type: "FolderBrowserDialog", ControlHwnd: hTreeView }
+            } catch {
+                ; Neither control found
+                return 0
+            }
+        }
+    }
+
+    ; ------------------------------------------------------------------------
+
+    ; Strip any prefix markers from the path
+    f_path := RegExReplace(ThisMenuItemName, "^[►▶→•\s]+\s*", "")
+    ; Strip any custom suffix if present
+    if (g_PathSelector_Settings.activeTabSuffix)
+        f_path := RegExReplace(f_path, "\Q" g_PathSelector_Settings.activeTabSuffix "\E$", "")
+
+    if (f_path = "")
+        return
+
+    if (windowClass = "#32770") ; It's a dialog
+    {
+        WinActivate("ahk_id " windowID)
+
+        ; Check if it's a legacy dialog
+        if (dialogInfo := DetectDialogType(windowID)) {
+            ; Use the legacy navigation approach
+            NavigateDialog(f_path, windowID, dialogInfo)
+        } else {
+            ; Use the existing modern dialog approach
+            Send("!{d}")
+            Sleep(50)
+            addressbar := ControlGetFocus("a")
+            ControlSetText(f_path, addressbar, "a")
+            ControlSend("{Enter}", addressbar, "a")
+            ControlFocus("Edit1", "a")
+        }
+        return
+    } else if (windowClass = "ConsoleWindowClass") {
+        WinActivate("ahk_id " windowID)
+        SetKeyDelay(0)
+        Send("{Esc}pushd " f_path "{Enter}")
+        return
+    }
 }
 
 NavigateLegacyFolderDialog(path, hTV) {
@@ -908,7 +906,6 @@ ShowPathSelectorSettingsGUI(*) {
 }
 
 ShowPathSelectorHelpWindow(*) {
-    global
     ; Added MinSize to prevent window from becoming too small
     helpGui := Gui("+Resize +MinSize400x300", g_pathSelector_programName " - Help & Tips")
     helpGui.SetFont("s10", "Segoe UI")
@@ -1071,7 +1068,6 @@ BrowseForDopusRT(editControl) {
 }
 
 PathSelector_SaveSettingsToFile() {
-    global
     SaveToPath(settingsFileDir) {
         settingsFilePath := settingsFileDir "\" g_PathSelector_SettingsFileInfo.fileName
 
