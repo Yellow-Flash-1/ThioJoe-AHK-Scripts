@@ -77,7 +77,7 @@ global g_PathSelector_Settings := {}
 ; Global object to hold info about the settings file
 global g_PathSelector_SettingsFileInfo := {}
 g_PathSelector_SettingsFileInfo.fileName := "ExplorerDialogPathSelector-Settings.ini",
-g_PathSelector_SettingsFileInfo.directoryPath := A_ScriptDir
+    g_PathSelector_SettingsFileInfo.directoryPath := A_ScriptDir
 g_PathSelector_SettingsFileInfo.filePath := g_PathSelector_SettingsFileInfo.directoryPath "\" g_PathSelector_SettingsFileInfo.fileName
 g_PathSelector_SettingsFileInfo.appDataDirName := "Explorer-Dialog-Path-Selector"
 g_PathSelector_SettingsFileInfo.appDataDirectoryPath := A_AppData "\" g_PathSelector_SettingsFileInfo.appDataDirName
@@ -112,16 +112,14 @@ PathSelector_UpdateHotkey(newHotkey := "", previousHotkeyString := "") {
     if (previousHotkeyString != "") {
         try {
             HotKey(previousHotkeyString, "Off")
-        }
-        catch Error as hotkeyUnsetErr {
+        } catch Error as hotkeyUnsetErr {
             MsgBox("Error disabling previous hotkey: " hotkeyUnsetErr.Message "`n`nHotkey Attempted to Disable:`n" previousHotkeyString "`n`nWill still try to set new hotkey.")
         }
     }
 
     try {
         HotKey(newHotkey, DisplayDialogPathMenu, "On") ; Include 'On' option to ensure it's enabled if it had been disabled before, like changing the hotkey back again
-    }
-    catch Error as hotkeySetErr {
+    } catch Error as hotkeySetErr {
         MsgBox("Error setting hotkey: " hotkeySetErr.Message "`n`nHotkey Set To:`n" newHotkey)
     }
 }
@@ -145,22 +143,20 @@ InitializePathSelectorSettings() {
 
     try {
         PathSelector_LoadSettingsFromSettingsFilePath(g_PathSelector_SettingsFileInfo.filePath)
-    }
-    catch Error as err {
+    } catch Error as err {
         MsgBox("Error reading settings file: " err.Message "`n`nUsing default settings.")
         for k, v in pathSelector_DefaultSettings.OwnProps() {
             g_PathSelector_Settings.%k% := pathSelector_DefaultSettings.%k%
         }
     }
-    
+
     ; ----- Special handling for certain settings -----
     ; For UI Access, always disable if not running standalone
-    if !ThisScriptRunningStandalone() or A_IsCompiled{
+    if !ThisScriptRunningStandalone() or A_IsCompiled {
         g_PathSelector_Settings.enableUIAccess := false
     }
     return
 }
-
 
 ; ---------------------------------------- UTILITY FUNCTIONS  ----------------------------------------------
 ; Function to check if the script is running standalone or included in another script
@@ -171,7 +167,6 @@ ThisScriptRunningStandalone() {
 
 ; ------------------------------------ MAIN LOGIC FUNCTIONS ---------------------------------------------------
 
-
 ; Navigate to the chosen path
 PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "", *) {
 
@@ -181,7 +176,7 @@ PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "
             DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
             ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
             DllCall("SendMessage", "Ptr", windowHwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
-                   
+
         } else if (dialogInfo.Type = "FolderBrowserDialog") {
             NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
         }
@@ -192,16 +187,16 @@ PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "
         if !WinWaitActive("ahk_class #32770", unset, 10) {
             return 0
         }
-        
+
         ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
         try {
             hFileNameEdit := ControlGetHwnd("Edit1", "ahk_class #32770")
-            return {Type: "HasEditControl", ControlHwnd: hFileNameEdit}
+            return { Type: "HasEditControl", ControlHwnd: hFileNameEdit }
         } catch {
             ; Try to get the handle of the TreeView control
             try {
                 hTreeView := ControlGetHwnd("SysTreeView321", "ahk_class #32770")
-                return {Type: "FolderBrowserDialog", ControlHwnd: hTreeView}
+                return { Type: "FolderBrowserDialog", ControlHwnd: hTreeView }
             } catch {
                 ; Neither control found
                 return 0
@@ -216,14 +211,14 @@ PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "
     ; Strip any custom suffix if present
     if (g_PathSelector_Settings.activeTabSuffix)
         f_path := RegExReplace(f_path, "\Q" g_PathSelector_Settings.activeTabSuffix "\E$", "")
-    
+
     if (f_path = "")
         return
 
     if (f_class = "#32770") ; It's a dialog
     {
         WinActivate("ahk_id " f_window_id)
-        
+
         ; Check if it's a legacy dialog
         if (dialogInfo := DetectDialogType(f_window_id)) {
             ; Use the legacy navigation approach
@@ -238,7 +233,7 @@ PathSelector_Navigate(A_ThisMenuItem := "", A_ThisMenuItemPos := "", MyMenu := "
             ControlFocus("Edit1", "a")
         }
         return
-    } else if (f_class = "ConsoleWindowClass") {   
+    } else if (f_class = "ConsoleWindowClass") {
         WinActivate("ahk_id " f_window_id)
         SetKeyDelay(0)
         Send("{Esc}pushd " f_path "{Enter}")
@@ -251,9 +246,9 @@ GetAllExplorerPaths() {
     paths := []
     explorerHwnds := WinGetList("ahk_class CabinetWClass")
     shell := ComObject("Shell.Application")
-    
+
     static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-    
+
     ; First make a pass through all explorer windows to get the active tab for each
     activeTabs := Map()
     for explorerHwnd in explorerHwnds {
@@ -263,7 +258,7 @@ GetAllExplorerPaths() {
             }
         }
     }
-    
+
     ; shell.Windows gives us a collection of all open open tabs as a flat list, not separated by window, so now we loop through and match them up by Hwnd
     ; Now do a single pass through all tabs
     for tab in shell.Windows {
@@ -281,17 +276,17 @@ GetAllExplorerPaths() {
                         shellBrowser := ComObjQuery(tab, IID_IShellBrowser, IID_IShellBrowser)
                         ; Call method of Index 3 on the interface to get the tab's handle so we can see if any windows have such an active tab
                         ; We need to know the method index number from the "vtable" - Apparently the struct for a vtable is often named with "Vtbl" at the end like "IWhateverInterfaceVtbl"
-                        ; IShellBrowserVtbl is in the Windows SDK inside ShObjIdl_core.h. The first 3 methods are AddRef, Release, and QueryInterface, inhereted from IUnknown, 
+                        ; IShellBrowserVtbl is in the Windows SDK inside ShObjIdl_core.h. The first 3 methods are AddRef, Release, and QueryInterface, inhereted from IUnknown,
                         ;       so the first real method is the fourth, meaning index 3, which is GetWindow and is also the one we want
                         ; The output of the ComCall GetWindow method here is the handle of the tab, not the parent window, so we can compare it to the activeTabs map
-                        ComCall(3, shellBrowser, "uint*", &thisTab:=0)
+                        ComCall(3, shellBrowser, "uint*", &thisTab := 0)
                         isActive := (thisTab = activeTabs[parentWindowHwnd])
                     }
-                    
-                    paths.Push({ 
-                        Hwnd: parentWindowHwnd, 
-                        Path: path, 
-                        IsActive: isActive 
+
+                    paths.Push({
+                        Hwnd: parentWindowHwnd,
+                        Path: path,
+                        IsActive: isActive
                     })
                 }
             }
@@ -310,26 +305,26 @@ GetDOpusPaths() {
         MsgBox("Directory Opus Runtime (dopusrt.exe) not found at:`n" g_PathSelector_Settings.dopusRTPath "`n`nDirectory Opus integration won't work. To enable it, set the correct path in the script configuration. Or set it to an empty string to avoid this error.", "DOpus Integration Error", "Icon!")
         return []
     }
-    
+
     tempFile := A_Temp "\dopus_paths.xml"
     try FileDelete(tempFile)
-    
+
     try {
         cmd := '"' g_PathSelector_Settings.dopusRTPath '" /info "' tempFile '",paths'
         RunWait(cmd, unset, "Hide")
-        
+
         if !FileExist(tempFile)
             return []
-        
+
         xmlContent := FileRead(tempFile)
         FileDelete(tempFile)
-        
+
         ; Parse paths from XML
         paths := []
-        
+
         ; Start after the XML declaration
         xmlContent := RegExReplace(xmlContent, "^.*?<results.*?>", "")
-        
+
         ; Extract each path element with its attributes
         while RegExMatch(xmlContent, "s)<path([^>]*)>(.*?)</path>", &match) {
             ; Get attributes
@@ -337,7 +332,7 @@ GetDOpusPaths() {
             RegExMatch(match[1], "lister=`"(0x[^`"]*)`"", &listerMatch)
             RegExMatch(match[1], "active_tab=`"([^`"]*)`"", &activeTabMatch)
             RegExMatch(match[1], "active_lister=`"([^`"]*)`"", &activeListerMatch)
-            
+
             ; Create path object
             pathObj := {
                 path: match[2],
@@ -346,14 +341,13 @@ GetDOpusPaths() {
                 isActiveLister: activeListerMatch ? (activeListerMatch[1] = "1") : false
             }
             paths.Push(pathObj)
-            
+
             ; Remove the processed path element and continue searching
             xmlContent := SubStr(xmlContent, match.Pos + match.Len)
         }
-        
+
         return paths
-    }
-    catch as err {
+    } catch as err {
         MsgBox("Error reading Directory Opus paths: " err.Message "`n`nDirectory Opus integration will be disabled.", "DOpus Integration Error", "Icon!")
         return []
     }
@@ -362,8 +356,7 @@ GetDOpusPaths() {
 ; Display the menu
 DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must accept the hotkey as its first parameter
     global
-    if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
-    {
+    if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
         ToolTip("Hotkey Pressed: " A_ThisHotkey)
         Sleep(1000)
         ToolTip()
@@ -380,8 +373,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             f_window_id := WinGetID("a")
             f_class := WinGetClass("a")
         } catch as err {
-            if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
-            {
+            if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
                 ToolTip("Unable to detect active window")
                 Sleep(1000)
                 ToolTip()
@@ -392,8 +384,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
     ; Verify we got valid window info
     if (!f_window_id || !f_class) {
-        if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
-        {
+        if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
             ToolTip("No valid window detected")
             Sleep(1000)
             ToolTip()
@@ -401,18 +392,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         return
     }
 
-    if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
-    {
+    if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
         ToolTip("Window ID: " f_window_id "`nClass: " f_class)
         Sleep(1000)
         ToolTip()
     }
 
     ; Don't display menu unless it's a dialog or console window
-    if !(f_class ~= "^(?i:#32770|ConsoleWindowClass)$")
-    {
-        if (g_PathSelector_Settings.enableExplorerDialogMenuDebug)
-        {
+    if !(f_class ~= "^(?i:#32770|ConsoleWindowClass)$") {
+        if (g_PathSelector_Settings.enableExplorerDialogMenuDebug) {
             ToolTip("Window class does not match expected: " f_class)
             Sleep(1000)
             ToolTip()
@@ -423,28 +411,28 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     ; Proceed to display the menu
     CurrentLocations := Menu()
     hasItems := false
-    
+
     ; Only get Directory Opus paths if dopusRTPath is set
     if (g_PathSelector_Settings.dopusRTPath != "") {
         ; Get paths from Directory Opus using DOpusRT
         paths := GetDOpusPaths()
-        
+
         ; Group paths by lister
         listers := Map()
-        
+
         ; First, group all paths by their lister
         for pathObj in paths {
             if !listers.Has(pathObj.lister)
                 listers[pathObj.lister] := []
             listers[pathObj.lister].Push(pathObj)
         }
-        
+
         ; First add paths from active lister
         for pathObj in paths {
             if (pathObj.isActiveLister) {
                 CurrentLocations.Add("Opus Window " A_Index " (Active)", PathSelector_Navigate)
                 CurrentLocations.Disable("Opus Window " A_Index " (Active)")
-                
+
                 ; Add all paths for this lister
                 listerPaths := listers[pathObj.lister]
                 for tabObj in listerPaths {
@@ -454,24 +442,24 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                         menuText := g_PathSelector_Settings.activeTabPrefix menuText g_PathSelector_Settings.activeTabSuffix
                     else
                         menuText := g_PathSelector_Settings.standardEntryPrefix menuText
-                    
+
                     CurrentLocations.Add(menuText, PathSelector_Navigate)
                     CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                     hasItems := true
                 }
-                
+
                 ; Remove this lister from the map so we don't show it again
                 listers.Delete(pathObj.lister)
                 break
             }
         }
-        
+
         ; Then add remaining Directory Opus listers
         windowNum := 2
         for lister, listerPaths in listers {
             CurrentLocations.Add("Opus Window " windowNum, PathSelector_Navigate)
             CurrentLocations.Disable("Opus Window " windowNum)
-            
+
             ; Add all paths for this lister
             for pathObj in listerPaths {
                 menuText := pathObj.path
@@ -480,12 +468,12 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                     menuText := g_PathSelector_Settings.activeTabPrefix menuText g_PathSelector_Settings.activeTabSuffix
                 else
                     menuText := g_PathSelector_Settings.standardEntryPrefix menuText
-                    
+
                 CurrentLocations.Add(menuText, PathSelector_Navigate)
                 CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
             }
-            
+
             windowNum++
         }
     }
@@ -533,7 +521,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         ; Add separator if we had Directory Opus or Explorer paths
         if (hasItems)
             CurrentLocations.Add()
-        
+
         menuText := g_PathSelector_Settings.standardEntryPrefix A_Clipboard
         CurrentLocations.Add(menuText, PathSelector_Navigate)
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
@@ -676,8 +664,6 @@ NavigateLegacyFolderDialog(path, hTV) {
     ; Send("{Enter}")
 }
 
-
-
 ; ----------------------------------------------------------------------------------------------
 ; ---------------------------------------- GUI-RELATED  ----------------------------------------
 ; ----------------------------------------------------------------------------------------------
@@ -690,7 +676,7 @@ ShowPathSelectorSettingsGUI(*) {
     settingsGui.SetFont("s10", "Segoe UI")
 
     hTT := CreateTooltipControl(settingsGui.Hwnd)
-    
+
     ; Add controls - using current values from global variables
     labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Menu Hotkey:")
     hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_PathSelector_Settings.dialogMenuHotkey)
@@ -699,7 +685,7 @@ ShowPathSelectorSettingsGUI(*) {
     labelhotkeyTooltipText .= "`n`nTip: Add a tilde (~) before the key to ensure the hotkey doesn't block the key's normal functionality.`nExample:  ~MButton"
     AddTooltipToControl(hTT, labelHotkey.Hwnd, labelhotkeyTooltipText)
     AddTooltipToControl(hTT, hotkeyEdit.Hwnd, labelhotkeyTooltipText)
-    
+
     labelOpusRTPath := settingsGui.AddText("xm y+10 w120 h23 +0x200", "DOpus RT Path:")
     dopusPathEdit := settingsGui.AddEdit("x+10 yp w200 h30 -Multi -Wrap", g_PathSelector_Settings.dopusRTPath) ; Setting explicit height and -Multi because for some reason it was wrapping the control box down. Not sure if -Wrap is necessary
     labelOpusRTPathTooltipText := "*** For Directory Opus users *** `nPath to dopusrt.exe`n`nOr leave empty to disable Directory Opus integration."
@@ -708,13 +694,13 @@ ShowPathSelectorSettingsGUI(*) {
     ; Button to browse for DOpusRT
     browseBtn := settingsGui.AddButton("x+5 yp w60", "Browse...")
     browseBtn.OnEvent("Click", (*) => BrowseForDopusRT(dopusPathEdit))
-    
+
     labelActiveTabPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Prefix:")
     prefixEdit := settingsGui.AddEdit("x+10 yp w200", g_PathSelector_Settings.activeTabPrefix)
     labelActiveTabPrefixTooltipText := "Text/Characters that appears to the left of the active path for each window group"
     AddTooltipToControl(hTT, labelActiveTabPrefix.Hwnd, labelActiveTabPrefixTooltipText)
     AddTooltipToControl(hTT, prefixEdit.Hwnd, labelActiveTabPrefixTooltipText)
-    
+
     labelStandardEntryPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Non-Active Prefix:")
     standardPrefixEdit := settingsGui.AddEdit("x+10 yp w200", g_PathSelector_Settings.standardEntryPrefix)
     labelStandardEntryPrefixTooltipText := "Indentation spaces for inactive tabs, so they line up"
@@ -726,12 +712,12 @@ ShowPathSelectorSettingsGUI(*) {
     ; labelActiveTabSuffixTooltipText := "Text/Characters will appear to the right of the active path for each window group, if you want as a label."
     ; AddTooltipToControl(hTT, labelActiveTabSuffix.Hwnd, labelActiveTabSuffixTooltipText)
     ; AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
-    
+
     debugCheck := settingsGui.AddCheckbox("xm y+15", "Enable Debug Mode")
     debugCheck.Value := g_PathSelector_Settings.enableExplorerDialogMenuDebug
     labelDebugCheckTooltipText := "Show tooltips with debug information when the hotkey is pressed.`nUseful for troubleshooting."
     AddTooltipToControl(hTT, debugCheck.Hwnd, labelDebugCheckTooltipText)
-    
+
     clipboardCheck := settingsGui.AddCheckbox("xm y+5", "Always Show Clipboard Menu Item")
     clipboardCheck.Value := g_PathSelector_Settings.alwaysShowClipboardmenuItem
     labelClipboardCheckTooltipText := "If Disabled: The option to paste the clipboard path will only appear when a valid path is found on the clipboard.`nIf Enabled: The menu entry will always appear, but is disabled when no valid path is found."
@@ -811,10 +797,10 @@ ShowPathSelectorSettingsGUI(*) {
         HotkeyInitialValue := g_PathSelector_Settings.dialogMenuHotkey
     }
     RecordInitialValuesFromGlobalSettings()
-    
+
     ; Show the GUI
     settingsGui.Show()
-    
+
     ResetSettings(*) {
         hotkeyEdit.Value := pathSelector_DefaultSettings.dialogMenuHotkey
         dopusPathEdit.Value := pathSelector_DefaultSettings.dopusRTPath
@@ -825,7 +811,7 @@ ShowPathSelectorSettingsGUI(*) {
         clipboardCheck.Value := pathSelector_DefaultSettings.alwaysShowClipboardmenuItem
         UIAccessCheck.Value := pathSelector_DefaultSettings.enableUIAccess
     }
-    
+
     SaveSettings(*) {
         ; Update settings object
         g_PathSelector_Settings.dialogMenuHotkey := hotkeyEdit.Value
@@ -836,9 +822,9 @@ ShowPathSelectorSettingsGUI(*) {
         g_PathSelector_Settings.enableExplorerDialogMenuDebug := debugCheck.Value
         g_PathSelector_Settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
         g_PathSelector_Settings.enableUIAccess := UIAccessCheck.Value
-        
+
         PathSelector_SaveSettingsToFile()
-        
+
         ; When UI Access goes from enabled to disabled, the user must manually close and re-run the script
         if (UIAccessInitialValue = true && UIAccessCheck.Value = false) {
             MsgBox("NOTE: When changing UI Access from Enabled to Disabled, you must manually close and re-run the script/app for changes to take effect.", "Settings Saved - Process Restart Required", "Icon!")
@@ -851,7 +837,7 @@ ShowPathSelectorSettingsGUI(*) {
         }
 
         ; The rest of the settings don't require a restart, they are pulled directly from the settings object which has been updated
-       
+
         ; Disable the original hotkey by passing in the previous hotkey string
         PathSelector_UpdateHotkey("", HotkeyInitialValue)
 
@@ -862,11 +848,11 @@ ShowPathSelectorSettingsGUI(*) {
             settingsGui.Destroy()
         }
     }
-    
+
     GuiResize(thisGui, minMax, width, height) {
         if minMax = -1  ; The window has been minimized
             return
-        
+
         ; Update control positions based on new window size
         for ctrl in thisGui {
             ; For specific control objects
@@ -922,16 +908,16 @@ ShowPathSelectorSettingsGUI(*) {
 }
 
 ShowPathSelectorHelpWindow(*) {
-    global 
+    global
     ; Added MinSize to prevent window from becoming too small
     helpGui := Gui("+Resize +MinSize400x300", g_pathSelector_programName " - Help & Tips")
     helpGui.SetFont("s10", "Segoe UI")
     helpGui.OnEvent("Size", GuiResize)
-    
+
     hTT := CreateTooltipControl(helpGui.Hwnd)
-    
+
     ; Settings file info
-    settingsFileDescription :=  helpGui.AddText("xm y+10 w300 h20", "Current config file path:") ; Creating this separately so we can set the font
+    settingsFileDescription := helpGui.AddText("xm y+10 w300 h20", "Current config file path:") ; Creating this separately so we can set the font
     settingsFileDescription.SetFont("s10 bold")
     labelFileLocationText := ""
     labelFileLocationEdit := ""
@@ -942,7 +928,7 @@ ShowPathSelectorHelpWindow(*) {
     } else {
         labelFileLocation := helpGui.AddText("xm y+0 w300 +Wrap", "N/A - Using default settings (no config file)")
     }
-    
+
     ; AHK Key Names documentation link
     linkDescription := helpGui.AddText("xm y+20 w300 h20", "For information about key names in AutoHotkey, click here:") ; Creating this separately so we can set the font
     linkDescription.SetFont("s10 bold")
@@ -965,18 +951,18 @@ ShowPathSelectorHelpWindow(*) {
         elevatedTipText := "• Enable `"UI Access`" setting to allow the script to work in dialogs from elevated windows without running this script itself as admin."
     }
     labelElevatedTip := helpGui.AddLink("xm y+5 w300", elevatedTipText)
-    
+
     ; ------------------------------------------------------------------------
     closeButton := helpGui.AddButton("xm y+10 w80 Default", "Close")
     closeButton.OnEvent("Click", (*) => helpGui.Destroy())
-    
+
     ; Show with specific initial size
     helpGui.Show("w500 h250")
-    
+
     GuiResize(thisGui, minMax, width, height) {
         if minMax = -1  ; The window has been minimized
             return
-        
+
         ; Update control positions based on new window size
         for ctrl in thisGui {
             if ctrl.HasProp("Type") {
@@ -990,7 +976,7 @@ ShowPathSelectorHelpWindow(*) {
                 } else if ctrl.Type = "Edit" {
                     ctrl.Move(unset, unset, width - 25)  ; Add some margin to the right
                 }
-            } 
+            }
         }
     }
 
@@ -1009,12 +995,12 @@ CreateTooltipControl(guiHwnd) {
     static TTS_ALWAYSTIP := 0x01
     static TTS_NOPREFIX := 0x02
     static WS_POPUP := 0x80000000
-    
+
     ; Initialize common controls
     INITCOMMONCONTROLSEX := Buffer(8, 0)
     NumPut("UInt", 8, "UInt", ICC_TAB_CLASSES, INITCOMMONCONTROLSEX)
     DllCall("comctl32\InitCommonControlsEx", "Ptr", INITCOMMONCONTROLSEX)
-    
+
     ; Create tooltip window
     hTT := DllCall("CreateWindowEx", "UInt", 0
         , "Str", "tooltips_class32"
@@ -1047,7 +1033,7 @@ AddTooltipToControl(hTT, controlHwnd, text) {
     ; Static control style - See: https://learn.microsoft.com/en-us/windows/win32/controls/static-control-styles
     static SS_NOTIFY := 0x100
     static GWL_STYLE := -16 ; Used in SetWindowLongPtr: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptrw
-    
+
     ; Check if this is a static text control and add SS_NOTIFY style if needed
     className := Buffer(256)
     if DllCall("GetClassName", "Ptr", controlHwnd, "Ptr", className, "Int", 256) {
@@ -1059,20 +1045,20 @@ AddTooltipToControl(hTT, controlHwnd, text) {
                 DllCall("SetWindowLongPtr", "Ptr", controlHwnd, "Int", GWL_STYLE, "Ptr", currentStyle | SS_NOTIFY)
         }
     }
-    
+
     ; Create and populate TOOLINFO structure
     TOOLINFO := Buffer(A_PtrSize = 8 ? 72 : 44, 0)  ; Size differs between 32 and 64 bit
-    
+
     ; Calculate size of TOOLINFO structure
     cbSize := A_PtrSize = 8 ? 72 : 44
-    
+
     ; Populate TOOLINFO structure
     NumPut("UInt", cbSize, TOOLINFO, 0)   ; cbSize
     NumPut("UInt", TTF_IDISHWND | TTF_SUBCLASS, TOOLINFO, 4)   ; uFlags
     NumPut("Ptr",  controlHwnd,  TOOLINFO, A_PtrSize = 8 ? 16 : 12)  ; hwnd
     NumPut("Ptr",  controlHwnd,  TOOLINFO, A_PtrSize = 8 ? 24 : 16)  ; uId
     NumPut("Ptr",  StrPtr(text), TOOLINFO, A_PtrSize = 8 ? 48 : 36)  ; lpszText
-    
+
     ; Add the tool
     result := DllCall("SendMessage", "Ptr", hTT, "UInt", TTM_ADDTOOL, "Ptr", 0, "Ptr", TOOLINFO)
     return result
@@ -1086,7 +1072,7 @@ BrowseForDopusRT(editControl) {
 
 PathSelector_SaveSettingsToFile() {
     global
-    SaveToPath(settingsFileDir){
+    SaveToPath(settingsFileDir) {
         settingsFilePath := settingsFileDir "\" g_PathSelector_SettingsFileInfo.fileName
 
         fileAlreadyExisted := (FileExist(settingsFilePath) != "") ; If an empty string is returned from FileExist, the file was not found
@@ -1106,7 +1092,7 @@ PathSelector_SaveSettingsToFile() {
         IniWrite(g_PathSelector_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
 
         g_PathSelector_SettingsFileInfo.usingSettingsFile := true
-    
+
         if (!fileAlreadyExisted) {
             MsgBox("Settings saved to file:`n" g_PathSelector_SettingsFileInfo.fileName "`n`nIn Location:`n" settingsFilePath "`n`n Settings will be automatically loaded from file from now on.", "Settings File Created", "Iconi")
         }
@@ -1123,7 +1109,7 @@ PathSelector_SaveSettingsToFile() {
                 SaveToPath(g_PathSelector_SettingsFileInfo.appDataDirectoryPath)
                 g_PathSelector_SettingsFileInfo.filePath := g_PathSelector_SettingsFileInfo.appDataFilePath ; If successful, update the global settings file path
                 g_PathSelector_SettingsFileInfo.directoryPath := g_PathSelector_SettingsFileInfo.appDataDirectoryPath
-            } catch Error as innerErr{
+            } catch Error as innerErr {
                 MsgBox("Error saving settings to file:`n" innerErr.Message "`n`nTried to save in: `n" g_PathSelector_SettingsFileInfo.appDataFilePath, "Error Saving Settings", "Icon!")
             }
         } else if (oErr.Number = 5) {
@@ -1132,10 +1118,10 @@ PathSelector_SaveSettingsToFile() {
     } catch {
         MsgBox("Error saving settings to file:`n" A_LastError "`n`nTried to save in: `n" g_PathSelector_SettingsFileInfo.filePath, "Error Saving Settings", "Icon!")
     }
-    
+
 }
 
-PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath){
+PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
     if FileExist(settingsFilePath) {
         ; Load each setting from the INI file
         g_PathSelector_Settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", pathSelector_DefaultSettings.dialogMenuHotkey)
@@ -1146,7 +1132,7 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath){
         g_PathSelector_Settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", pathSelector_DefaultSettings.enableExplorerDialogMenuDebug)
         g_PathSelector_Settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", pathSelector_DefaultSettings.alwaysShowClipboardmenuItem)
         g_PathSelector_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
-        
+
         ; Convert string boolean values to actual booleans
         g_PathSelector_Settings.enableExplorerDialogMenuDebug := g_PathSelector_Settings.enableExplorerDialogMenuDebug = "1"
         g_PathSelector_Settings.alwaysShowClipboardmenuItem := g_PathSelector_Settings.alwaysShowClipboardmenuItem = "1"
@@ -1187,19 +1173,19 @@ PathSelector_SetupSystemTray(systemTraySettings) {
             positionIndex := positionIndex + 1
         }
     }
-    
+
     ; Uses the & symbol to indicate the 1-indexed position of the menu item
     if (addSeparatorBefore) {
         A_TrayMenu.Insert(positionIndex . "&", "")  ; Separator
         positionIndex := positionIndex + 1
     }
 
-    A_TrayMenu.Insert(positionIndex . "&" , settingsMenuItemName, ShowPathSelectorSettingsGUI)
+    A_TrayMenu.Insert(positionIndex . "&", settingsMenuItemName, ShowPathSelectorSettingsGUI)
 
-    if (addSeparatorAfter){
+    if (addSeparatorAfter) {
         A_TrayMenu.Insert((positionIndex + 1) . "&", "")  ; Separator - Comment/Uncomment if you want to add a separator or not
     }
-    
+
     ; If the script is compiled or running standalone, make the settings the default menu item
     if (ThisScriptRunningStandalone() or A_IsCompiled or alwaysDefaultItem) {
         A_TrayMenu.Default := settingsMenuItemName
