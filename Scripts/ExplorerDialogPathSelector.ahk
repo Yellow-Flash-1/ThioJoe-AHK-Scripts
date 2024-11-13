@@ -482,17 +482,16 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         if (hasItems)
             CurrentLocations.Add()
 
-        menuText := g_pth_Settings.standardEntryPrefix A_Clipboard
-        CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
+        menuText := g_pth_Settings.standardEntryPrefix A_Clipboard Chr(0x200B) ; Add zero-with space as a janky way to make the menu item unique so it doesn't overwrite the icon of previous items with same path
+        test := CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         hasItems := true
     } else if g_pth_Settings.alwaysShowClipboardmenuItem = true {
-        ; If there is no path in the clipboard, add an option to enter a path
         if (hasItems)
-            CurrentLocations.Add()
+            CurrentLocations.Add() ; Separator
 
         menuText := g_pth_Settings.standardEntryPrefix "Paste path from clipboard"
-        CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID)) ; Still need to supply a callback function even though we'll disable it later
+        CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
         CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
         CurrentLocations.Disable(menuText)
     }
@@ -517,7 +516,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 ; Callback function to navigate to a path. The first 3 parameters are provided by the .Add method of the Menu object
 ; The other two parameters must be provided using .Bind when specifying this function as a callback!
 PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, windowClass, windowID) {
-
+    ; ------------------------- LOCAL FUNCTIONS -------------------------
     NavigateDialog(path, windowHwnd, dialogInfo) {
         if (dialogInfo.Type = "HasEditControl") {
             ; Send the path to the edit control text box using SendMessage
@@ -551,11 +550,10 @@ PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, windowClass, wi
             }
         }
     }
-
     ; ------------------------------------------------------------------------
-
+    f_path := RTrim(ThisMenuItemName, Chr(0x200B)) ; Remove the zero-width-space character we used to make the clipboard item unique
     ; Strip any prefix markers from the path
-    f_path := RegExReplace(ThisMenuItemName, "^[►▶→•\s]+\s*", "")
+    f_path := RegExReplace(f_path, "^[►▶→•\s]+\s*", "")
     ; Strip any custom suffix if present
     if (g_pth_Settings.activeTabSuffix)
         f_path := RegExReplace(f_path, "\Q" g_pth_Settings.activeTabSuffix "\E$", "")
