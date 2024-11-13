@@ -32,7 +32,8 @@ class pathSelector_DefaultSettings {
     static activeTabPrefix := "► "          ;  Appears to the left of the active path for each window group
     static standardEntryPrefix := "    "    ; Indentation for inactive tabs, so they line up
     ; Path to dopusrt.exe - can be empty to explicitly disable Directory Opus integration, but it will automatically disable if the file is not found anyway
-    static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"  
+    static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"
+    static maxMenuLength := 120             ; Maximum length of menu items. The true max is MAX_PATH, but thats really long so this is a reasonable limit
 }
 
 ; System Tray Menu Options
@@ -300,6 +301,7 @@ GetDOpusPaths() {
 ; Display the menu
 DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must accept the hotkey as its first parameter
     debugMode := g_pth_Settings.enableExplorerDialogMenuDebug
+    maxMenuLength := g_pth_Settings.maxMenuLength
 
     if (debugMode) {
         ToolTip("Hotkey Pressed: " A_ThisHotkey)
@@ -387,6 +389,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                         menuText := g_pth_Settings.activeTabPrefix menuText g_pth_Settings.activeTabSuffix
                     else
                         menuText := g_pth_Settings.standardEntryPrefix menuText
+
+                    ; If the menuText is greater than the max of around 256 characters, truncate it from the right using SubStr
+                    stringLength := StrLen(menuText)
+                    if (stringLength > maxMenuLength) {
+                        if (tabObj.isActiveTab)
+                            menuText := g_pth_Settings.activeTabPrefix "..." SubStr(menuText, (-1 * maxMenuLength)) g_pth_Settings.activeTabSuffix
+                        else
+                            menuText := g_pth_Settings.standardEntryPrefix "..." SubStr(menuText, (-1 * maxMenuLength))
+                    }
 
                     CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
                     CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
@@ -1108,6 +1119,7 @@ PathSelector_SaveSettingsToFile() {
         IniWrite(g_pth_Settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
         IniWrite(g_pth_Settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
         IniWrite(g_pth_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
+        IniWrite(g_pth_Settings.maxMenuLength, settingsFilePath, "Settings", "maxMenuLength")
 
         g_pth_SettingsFile.usingSettingsFile := true
 
@@ -1150,11 +1162,15 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
         g_pth_Settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", pathSelector_DefaultSettings.enableExplorerDialogMenuDebug)
         g_pth_Settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", pathSelector_DefaultSettings.alwaysShowClipboardmenuItem)
         g_pth_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
+        g_pth_settings.maxMenuLength := IniRead(settingsFilePath, "Settings", "maxMenuLength", pathSelector_DefaultSettings.maxMenuLength)
 
         ; Convert string boolean values to actual booleans
         g_pth_Settings.enableExplorerDialogMenuDebug := g_pth_Settings.enableExplorerDialogMenuDebug = "1"
         g_pth_Settings.alwaysShowClipboardmenuItem := g_pth_Settings.alwaysShowClipboardmenuItem = "1"
         g_pth_Settings.enableUIAccess := g_pth_Settings.enableUIAccess = "1"
+
+        ; Convert to int where necessary
+        g_pth_settings.maxMenuLength := g_pth_settings.maxMenuLength + 0
 
         g_pth_SettingsFile.usingSettingsFile := true
     } else {
