@@ -54,7 +54,7 @@ PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.0.0.0"
+global g_pathSelector_version := "1.1.0.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
@@ -304,6 +304,22 @@ GetDOpusPaths() {
 
 ; Display the menu
 DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must accept the hotkey as its first parameter
+    ; ------------------------- LOCAL FUNCTIONS -------------------------
+    GetDialogAddressBarPath(windowHwnd) {
+        controls := WinGetControls(windowHwnd)
+        ; Go through controls that match "ToolbarWindow32*" in the class name and check if their text starts with "Address: "
+        for controlClassNN in controls {
+            if (controlClassNN ~= "ToolbarWindow32") {
+                controlText := ControlGetText(controlClassNN, windowHwnd)
+                if (controlText ~= "Address: ") {
+                    ; Get the path from the address bar
+                    return SubStr(controlText, 10)
+                }
+            }
+        }
+        return ""
+    }
+
     debugMode := g_pth_Settings.enableExplorerDialogMenuDebug
     maxMenuLength := g_pth_Settings.maxMenuLength
 
@@ -317,12 +333,14 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     try {
         windowID := WinGetID("a")
         windowClass := WinGetClass("a")
+        windowHwnd := WinExist("a")
     } catch as err {
         ; If we can't get window info, wait briefly and try once more
         Sleep(25)
         try {
             windowID := WinGetID("a")
             windowClass := WinGetClass("a")
+            windowHwnd := WinExist("a")
         } catch as err {
             if (debugMode) {
                 ToolTip("Unable to detect active window")
@@ -359,9 +377,17 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         return
     }
 
+    ; Get the path from the dialog. At this point we know it's the correct type of window
+    if (windowHwnd) {
+        windowPath := GetDialogAddressBarPath(windowHwnd)
+    } else {
+        windowPath := ""
+    }
+
     ; Proceed to display the menu
     CurrentLocations := Menu()
     hasItems := false
+    currentMenuNum := 0 ; Used to keep track of the current menu item number so we can refer to each item by index like "1&" in case of duplicate path entries
 
     ; Only get Directory Opus paths if dopusRTPath is set
     if (g_pth_Settings.dopusRTPath != "") {
@@ -381,8 +407,9 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         ; First add paths from active lister
         for pathObj in paths {
             if (pathObj.isActiveLister) {
-                CurrentLocations.Add("Opus Window " A_Index " (Active)", PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-                CurrentLocations.Disable("Opus Window " A_Index " (Active)")
+                CurrentLocations.Insert(unset, "Opus Window " A_Index " (Active)", PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID)) ; Section header
+                currentMenuNum++
+                CurrentLocations.Disable(currentMenuNum "&")
 
                 ; Add all paths for this lister
                 listerPaths := listers[pathObj.lister]
@@ -403,9 +430,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                             menuText := g_pth_Settings.standardEntryPrefix "..." SubStr(menuText, (-1 * maxMenuLength))
                     }
 
-                    CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-                    CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
+                    CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
+                    currentMenuNum++
+                    CurrentLocations.SetIcon(currentMenuNum "&", A_WinDir . "\system32\imageres.dll", "4")
                     hasItems := true
+
+                    ; Disable the item if it matches the dialog already. Because it won't behave correctly if you try to navigate to the same path
+                    if (windowPath and (windowPath = tabObj.path)) {
+                        CurrentLocations.Disable(currentMenuNum "&")
+                    }
                 }
 
                 ; Remove this lister from the map so we don't show it again
@@ -414,11 +447,12 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             }
         }
 
-        ; Then add remaining Directory Opus listers
+        ; Then add remaining Directory Opus listers. I forget why there's a separate block for the rest, I think there was a reason, maybe I'll conolidate it later
         windowNum := 2
         for lister, listerPaths in listers {
-            CurrentLocations.Add("Opus Window " windowNum, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-            CurrentLocations.Disable("Opus Window " windowNum)
+            CurrentLocations.Insert(unset, "Opus Window " windowNum, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID)) ; Section header
+            currentMenuNum++
+            CurrentLocations.Disable(currentMenuNum "&")
 
             ; Add all paths for this lister
             for pathObj in listerPaths {
@@ -429,9 +463,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                 else
                     menuText := g_pth_Settings.standardEntryPrefix menuText
 
-                CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-                CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
+                CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
+                currentMenuNum++
+                CurrentLocations.SetIcon(currentMenuNum "&", A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
+
+                ; Disable the item if it matches the dialog already. Because it won't behave correctly if you try to navigate to the same path
+                if (windowPath and (windowPath = pathObj.path)) {
+                    CurrentLocations.Disable(currentMenuNum "&")
+                }
             }
 
             windowNum++
@@ -452,12 +492,14 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     if explorerPaths.Length > 0 {
         ; Add separator if we had Directory Opus paths
         if (hasItems)
-            CurrentLocations.Add()
+            CurrentLocations.Insert(unset) ; Separator
+            currentMenuNum++
 
         windowNum := 1
         for hwnd, windowPaths in windows {
-            CurrentLocations.Add("Explorer Window " windowNum, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-            CurrentLocations.Disable("Explorer Window " windowNum)
+            CurrentLocations.Insert(unset, "Explorer Window " windowNum, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID)) ; Section header
+            currentMenuNum++
+            CurrentLocations.Disable(currentMenuNum "&")
 
             for pathObj in windowPaths {
                 menuText := pathObj.Path
@@ -467,9 +509,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                 else
                     menuText := g_pth_Settings.standardEntryPrefix menuText
 
-                CurrentLocations.Add(menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-                CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "4")
+                CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
+                currentMenuNum++
+                CurrentLocations.SetIcon(currentMenuNum "&", A_WinDir . "\system32\imageres.dll", "4")
                 hasItems := true
+
+                ; Disable the item if it matches the dialog already. Because it won't behave correctly if you try to navigate to the same path
+                if (windowPath and (windowPath = pathObj.path)) {
+                    CurrentLocations.Disable(currentMenuNum "&")
+                }
             }
 
             windowNum++
@@ -480,20 +528,31 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     if DllCall("Shlwapi\PathIsDirectoryW", "Str", A_Clipboard) != 0 {
         ; Add separator if we had Directory Opus or Explorer paths
         if (hasItems)
-            CurrentLocations.Add()
+            CurrentLocations.Insert(unset)
+            currentMenuNum++
 
         menuText := g_pth_Settings.standardEntryPrefix A_Clipboard Chr(0x200B) ; Add zero-with space as a janky way to make the menu item unique so it doesn't overwrite the icon of previous items with same path
-        test := CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-        CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
+        CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
+        currentMenuNum++
+        CurrentLocations.SetIcon(currentMenuNum "&", A_WinDir . "\system32\imageres.dll", "-5301")
         hasItems := true
+
+        if (windowPath and (windowPath = A_Clipboard)) {
+            CurrentLocations.Disable(currentMenuNum "&")
+        }
+        
     } else if g_pth_Settings.alwaysShowClipboardmenuItem = true {
         if (hasItems)
-            CurrentLocations.Add() ; Separator
+            CurrentLocations.Insert(unset) ; Separator
+            currentMenuNum++
 
         menuText := g_pth_Settings.standardEntryPrefix "Paste path from clipboard"
         CurrentLocations.Insert(unset, menuText, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
-        CurrentLocations.SetIcon(menuText, A_WinDir . "\system32\imageres.dll", "-5301")
-        CurrentLocations.Disable(menuText)
+        currentMenuNum++
+        CurrentLocations.SetIcon(currentMenuNum "&", A_WinDir . "\system32\imageres.dll", "-5301")
+        CurrentLocations.Disable(currentMenuNum "&")
+        hasItems := true ; Still show the menu item even if clipboard is empty, if the user has set it to always show clipboard item
+        
     }
 
     RemoveToolTip() {
