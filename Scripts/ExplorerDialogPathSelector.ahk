@@ -320,15 +320,34 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         return ""
     }
 
-    InsertMenuItem(menuObj, text, path := unset, iconPath := unset, iconIndex := unset) {
+    ;global menuItemTrackerObj := {} ; For debugging purposes
+    InsertMenuItem(menuObj, text, path := unset, iconPath := unset, iconIndex := unset, isActiveTab := unset) {
         if text = "" { ; It's a separator
             menuObj.Insert(unset)
             currentMenuNum++
             return
         }
 
-        menuObj.Insert(unset, text, PathSelector_Navigate.Bind(unset, unset, unset, windowClass, windowID))
+        pathStr := "" ; Default to empty string so we can use the same callback without passing f_path parameter unset
+        if (IsSet(path)) {
+            pathStr := path
+        }
+
+        ; If the menuText is greater than the max, truncate it from the right using SubStr. The path should still work since this is only the text displayed in the menu
+        stringLength := StrLen(text)
+        ; Note: If the path is longer than MAX_PATH (I believe), Windows will convert it to 8.3 format. Navigation still work but our window path matching might not work
+        if (stringLength > maxMenuLength) {
+            if (isActiveTab)
+                text := g_pth_Settings.activeTabPrefix "..." SubStr(text, (-1 * maxMenuLength)) g_pth_Settings.activeTabSuffix
+            else
+                text := g_pth_Settings.standardEntryPrefix "..." SubStr(text, (-1 * maxMenuLength))
+        }
+
+        ; Add the item and increment the counter
+        menuObj.Insert(unset, text, PathSelector_Navigate.Bind(unset, unset, unset, pathStr, windowClass, windowID))
         currentMenuNum++
+
+        ;menuItemTrackerObj.DefineProp(currentMenuNum, {Value: {pathStr: pathStr, text: pathStr}}) ; For debugging purposes
 
         if (!IsSet(path)) { ; It's a header because it's just text
             menuObj.Disable(currentMenuNum "&")
@@ -344,6 +363,8 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             menuObj.Disable(currentMenuNum "&")
         }
     }
+
+    ; ------------------------------------------------------------------------
 
     debugMode := g_pth_Settings.enableExplorerDialogMenuDebug
     maxMenuLength := g_pth_Settings.maxMenuLength
@@ -432,7 +453,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         ; First add paths from active lister
         for pathObj in paths {
             if (pathObj.isActiveLister) {
-                InsertMenuItem(CurrentLocations, "Opus Window " A_Index " (Active)", unset)
+                InsertMenuItem(CurrentLocations, "Opus Window " A_Index " (Active)", unset, unset, unset, unset) ; Header
 
                 ; Add all paths for this lister
                 listerPaths := listers[pathObj.lister]
@@ -444,16 +465,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                     else
                         menuText := g_pth_Settings.standardEntryPrefix menuText
 
-                    ; If the menuText is greater than the max of around 256 characters, truncate it from the right using SubStr
-                    stringLength := StrLen(menuText)
-                    if (stringLength > maxMenuLength) {
-                        if (tabObj.isActiveTab)
-                            menuText := g_pth_Settings.activeTabPrefix "..." SubStr(menuText, (-1 * maxMenuLength)) g_pth_Settings.activeTabSuffix
-                        else
-                            menuText := g_pth_Settings.standardEntryPrefix "..." SubStr(menuText, (-1 * maxMenuLength))
-                    }
-
-                    InsertMenuItem(CurrentLocations, menuText, pathObj.path, A_WinDir . "\system32\imageres.dll", "4")
+                    InsertMenuItem(CurrentLocations, menuText, tabObj.path, A_WinDir . "\system32\imageres.dll", "4", tabObj.isActiveTab) ; Path
                     hasItems := true
 
                 }
@@ -465,9 +477,10 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         }
 
         ; Then add remaining Directory Opus listers. I forget why there's a separate block for the rest, I think there was a reason, maybe I'll conolidate it later
+        ; Might have something to do with using pathObj vs tabObj
         windowNum := 2
         for lister, listerPaths in listers {
-            InsertMenuItem(CurrentLocations, "Opus Window " windowNum " (Active)", unset)
+            InsertMenuItem(CurrentLocations, "Opus Window " windowNum " (Active)", unset, unset, unset, unset) ; Header
 
             ; Add all paths for this lister
             for pathObj in listerPaths {
@@ -478,7 +491,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                 else
                     menuText := g_pth_Settings.standardEntryPrefix menuText
 
-                InsertMenuItem(CurrentLocations, menuText, pathObj.path, A_WinDir . "\system32\imageres.dll", "4")
+                InsertMenuItem(CurrentLocations, menuText, pathObj.path, A_WinDir . "\system32\imageres.dll", "4", pathObj.isActiveTab) ; Path
                 hasItems := true
             }
 
@@ -500,11 +513,11 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     if explorerPaths.Length > 0 {
         ; Add separator if we had Directory Opus paths
         if (hasItems)
-            InsertMenuItem(CurrentLocations, "") ; Separator
+            InsertMenuItem(CurrentLocations, "", unset, unset, unset, unset) ; Separator
 
         windowNum := 1
         for hwnd, windowPaths in windows {
-            InsertMenuItem(CurrentLocations, "Explorer Window " windowNum, unset, unset, unset)
+            InsertMenuItem(CurrentLocations, "Explorer Window " windowNum, unset, unset, unset, unset) ; Header
 
             for pathObj in windowPaths {
                 menuText := pathObj.Path
@@ -514,7 +527,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
                 else
                     menuText := g_pth_Settings.standardEntryPrefix menuText
 
-                InsertMenuItem(CurrentLocations, menuText, pathObj.path, A_WinDir . "\system32\imageres.dll", "4")
+                InsertMenuItem(CurrentLocations, menuText, pathObj.path, A_WinDir . "\system32\imageres.dll", "4", pathObj.IsActive) ; Path
                 hasItems := true
             }
 
@@ -526,18 +539,19 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     if DllCall("Shlwapi\PathIsDirectoryW", "Str", A_Clipboard) != 0 {
         ; Add separator if we had Directory Opus or Explorer paths
         if (hasItems)
-            InsertMenuItem(CurrentLocations, "") ; Separator
+            InsertMenuItem(CurrentLocations, "", unset, unset, unset, unset) ; Separator
 
-        menuText := g_pth_Settings.standardEntryPrefix A_Clipboard Chr(0x200B) ; Add zero-with space as a janky way to make the menu item unique so it doesn't overwrite the icon of previous items with same path
-        InsertMenuItem(CurrentLocations, menuText, menuText, A_WinDir . "\system32\imageres.dll", "-5301")
+        path := A_Clipboard
+        menuText := g_pth_Settings.standardEntryPrefix path Chr(0x200B) ; Add zero-with space as a janky way to make the menu item unique so it doesn't overwrite the icon of previous items with same path
+        InsertMenuItem(CurrentLocations, menuText, path, A_WinDir . "\system32\imageres.dll", "-5301", false) ; Path (Clipboard)
         hasItems := true
         
     } else if g_pth_Settings.alwaysShowClipboardmenuItem = true {
         if (hasItems)
-            InsertMenuItem(CurrentLocations, "") ; Separator
+            InsertMenuItem(CurrentLocations, "", unset, unset, unset) ; Separator
 
         menuText := g_pth_Settings.standardEntryPrefix "Paste path from clipboard"
-        InsertMenuItem(CurrentLocations, menuText, menuText, A_WinDir . "\system32\imageres.dll", "-5301")
+        InsertMenuItem(CurrentLocations, menuText, "placeholder path text", A_WinDir . "\system32\imageres.dll", "-5301", false) ; Clipboard Placeholder entry. 'Path' won't be used so using placeholder text
         CurrentLocations.Disable(currentMenuNum "&")
         hasItems := true ; Still show the menu item even if clipboard is empty, if the user has set it to always show clipboard item
     }
@@ -561,7 +575,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
 ; Callback function to navigate to a path. The first 3 parameters are provided by the .Add method of the Menu object
 ; The other two parameters must be provided using .Bind when specifying this function as a callback!
-PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, windowClass, windowID) {
+PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowClass, windowID) {
     ; ------------------------- LOCAL FUNCTIONS -------------------------
     NavigateDialog(path, windowHwnd, dialogInfo) {
         if (dialogInfo.Type = "HasEditControl") {
@@ -597,13 +611,8 @@ PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, windowClass, wi
         }
     }
     ; ------------------------------------------------------------------------
-    f_path := RTrim(ThisMenuItemName, Chr(0x200B)) ; Remove the zero-width-space character we used to make the clipboard item unique
-    ; Strip any prefix markers from the path
-    f_path := RegExReplace(f_path, "^[►▶→•\s]+\s*", "")
-    ; Strip any custom suffix if present
-    if (g_pth_Settings.activeTabSuffix)
-        f_path := RegExReplace(f_path, "\Q" g_pth_Settings.activeTabSuffix "\E$", "")
 
+    ; Return if there's nothing
     if (f_path = "")
         return
 
