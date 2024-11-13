@@ -102,6 +102,10 @@ InitializePathSelectorSettings() {
     if !FileExist(pathSelector_DefaultSettings.dopusRTPath) {
         pathSelector_DefaultSettings.dopusRTPath := ""
     }
+    ; If the script is not running standalone or compiled, disable UI Access by default
+    if !ThisScriptRunningStandalone() or A_IsCompiled {
+        pathSelector_DefaultSettings.enableUIAccess := false
+    }
 
     ; ------------------ Load settings Files ------------------
     ; If the settings file isn't in the current directory, but it is in AppData, use the AppData path
