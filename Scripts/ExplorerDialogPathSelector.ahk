@@ -1177,15 +1177,15 @@ ShowConditionalFavoritesGui(*) {
     ShowConditionTypeDescription()  ; Show description for the default selected type
     
     ; Condition Values
-    pathGui.AddText("xs+10 yp+40", "Condition Values (one per line):")
+    conditionValuesLabel := pathGui.AddText("xs+10 yp+40", "Condition Values (one per line):")
     valuesEdit := pathGui.AddEdit("w560 h60 vConditionValues Multi VScroll", "")
     
     ; Paths
-    pathGui.AddText("xs+10 y+10", "Paths to show when any of the condition values match (one per line):")
+    pathsEditLabel := pathGui.AddText("xs+10 y+10", "Paths to show when any of the condition values match (one per line):")
     pathsEdit := pathGui.AddEdit("w560 h60 vPaths Multi VScroll", "")
     
     ; Main buttons
-    saveBtn := pathGui.AddButton("xp+10 yp+15 w80", "Save")
+    saveBtn := pathGui.AddButton("xs yp+15 w80", "Save")
     saveBtn.OnEvent("Click", SaveAndClose)
     cancelBtn := pathGui.AddButton("x+10 yp w80", "Cancel")
     cancelBtn.OnEvent("Click", (*) => pathGui.Destroy())
@@ -1256,7 +1256,7 @@ ShowConditionalFavoritesGui(*) {
             listView.ModifyCol(3, defaultValColWidth) ; Set to 180 if it's less than that
         }
 
-        listView.Redraw()
+        ; listView.Redraw()
     }
 
     ; Helper function to show the description for the selected condition type
@@ -1448,9 +1448,44 @@ ShowConditionalFavoritesGui(*) {
         return ctrl_X + ctrlWidth
     }
 
+    GetControlBottomEdge(ctrl) {
+        ctrl.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
+        return ctrl_Y + ctrlHeight
+    }
+
+    HeightToFill(ctrl, parentHeight) {
+        ctrl.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
+        return parentHeight - ctrl_Y
+    }
+
     GuiResize(thisGui, minMax, window_width, window_height) {
         if minMax = -1  ; The window has been minimized
             return
+
+        ; ---------------------------------- Update Entry Details Controls Sizes ----------------------------------
+        ; Update the groupbox height based on the window size
+        grpBox.GetPos(&grpBox_X, &grpBox_Y, &grpBoxWidth, &grpBoxHeight)
+        newGrpBoxHeight := HeightToFill(grpBox, window_height) - 60
+        grpBox.Move(unset, unset, window_width - 30, newGrpBoxHeight)
+        ; grpBox.Redraw()
+
+        ; Update the text positions and sizes of the condition values and paths edit boxes. Need to be sure to keep their labels positioned correctly
+        ; The two together should fill the remaining height of the groupbox with about half of the height each
+        grpBoxAvailableHeight := newGrpBoxHeight - (GetControlBottomEdge(conditionValuesLabel) - grpBox_Y) - 50 ; Subtract out space for controls above the edit boxes and buffer between
+        ; First do the values edit box and label
+        grpBox.GetPos(&grpBox_X, &grpBox_Y, &grpBoxWidth, &grpBoxHeight)
+        valuesEdit.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
+
+        valueEditHeight := grpBoxAvailableHeight / 2  ; Half the height of the groupbox minus some margin
+        valuesEdit.Move(unset, unset, window_width - 50, valueEditHeight)  ; Set width to fill the window
+        ; valuesEdit.Redraw()
+
+        ; Now do the paths edit box and label
+        startY := GetControlBottomEdge(valuesEdit)
+        pathsEditLabel.Move(unset, startY + 10)  ; Move the label down 10 pixels from the bottom of the values edit box
+        pathsEdit.Move(unset, startY + 30, window_width - 50, valueEditHeight)  ; Set width to fill the window
+
+        ;------------------------------------------------------------------------------------------------------------
 
         ; Update control positions based on new window size
         for ctrl in thisGui {
@@ -1461,34 +1496,26 @@ ShowConditionalFavoritesGui(*) {
                 typeDropdown.GetPos(unset, &dropdownY, unset, unset)
                 ; Set height to the same as the dropdown, and fill the remaining width.
                 ctrl.Move(unset, dropdownY, window_width - ctrl_X - 20)  ; Set width to fill to the right edge of the window (with some margin)
-                ctrl.Redraw()
+                ; ctrl.Redraw()
                 continue
-                
-            } else if ctrl = grpBox {
-                pathsEdit.GetPos(unset, &pathEditY, unset, &pathEditHeight)
-                totalHeight := pathEditY + pathEditHeight - ctrl_Y + 20
-                ctrl.Move(unset, unset, window_width - 30, totalHeight)  ; Set width to fill to the right edge of the window (with some margin)
 
             } else if ctrl = listView {
                 ctrl.Move(unset, unset, window_width - 30)  ; Set consistent width for edit boxes
-                    ctrl.Redraw()
+                    ; ctrl.Redraw()
 
             ; Buttons
             } else if ctrl = saveBtn or ctrl = cancelBtn {
                 ctrl.Move(unset, window_height-45)
-                ctrl.Redraw()
+                ; ctrl.Redraw()
             } else if ctrl = applyBtn {
                 ctrl.Move(window_width - ctrlWidth - 20, window_height-45)  ; Bottom align buttons with 40px margin from bottom
-                ctrl.Redraw()
+                ; ctrl.Redraw()
             } else if ctrl = helpBtn {
                 ctrl.Move(window_width - ctrlWidth - 20)  ; Bottom align buttons with 40px margin from bottom
 
             ; For general control types
             } else if ctrl.HasProp("Type") {
-                if ctrl.Type = "Edit" {
-                    ctrl.Move(unset, unset, window_width - 50)  ; Set consistent width for edit boxes
-                    ctrl.Redraw()
-                }
+                ; Nothing here yet
             }
         }
     }
