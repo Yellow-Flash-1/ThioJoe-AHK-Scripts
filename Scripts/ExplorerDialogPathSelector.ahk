@@ -28,6 +28,8 @@ class pathSelector_DefaultSettings {
     static alwaysShowClipboardmenuItem := true
     ; Whether to enable UI access by default to allow the script to run in elevated windows without running as admin
     static enableUIAccess := true
+    ; Group paths by Window or not
+    static groupPathsByWindow := true
     static activeTabSuffix := ""            ;  Appears to the right of the active path for each window group
     static activeTabPrefix := "► "          ;  Appears to the left of the active path for each window group
     static standardEntryPrefix := "    "    ; Indentation for inactive tabs, so they line up
@@ -54,7 +56,7 @@ PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.1.0.0"
+global g_pathSelector_version := "1.2.0.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
@@ -517,7 +519,9 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
         windowNum := 1
         for hwnd, windowPaths in windows {
-            InsertMenuItem(CurrentLocations, "Explorer Window " windowNum, unset, unset, unset, unset) ; Header
+            if (g_pth_Settings.groupPathsByWindow){
+                InsertMenuItem(CurrentLocations, "Explorer Window " windowNum, unset, unset, unset, unset) ; Header
+            }
 
             for pathObj in windowPaths {
                 menuText := pathObj.Path
@@ -765,7 +769,7 @@ ShowPathSelectorSettingsGUI(*) {
 
     hTT := CreateTooltipControl(settingsGui.Hwnd)
 
-    ; Add controls - using current values from global variables
+    ; Set Hotkey - Edit Box
     labelHotkey := settingsGui.AddText("xm y10 w120 h23 +0x200", "Menu Hotkey:")
     hotkeyEdit := settingsGui.AddEdit("x+10 yp w200", g_pth_Settings.dialogMenuHotkey)
     hotkeyEdit.SetFont("s12", "Consolas")
@@ -774,43 +778,56 @@ ShowPathSelectorSettingsGUI(*) {
     AddTooltipToControl(hTT, labelHotkey.Hwnd, labelhotkeyTooltipText)
     AddTooltipToControl(hTT, hotkeyEdit.Hwnd, labelhotkeyTooltipText)
 
+    ; DOpus RT Path - Edit Box
     labelOpusRTPath := settingsGui.AddText("xm y+10 w120 h23 +0x200", "DOpus RT Path:")
     dopusPathEdit := settingsGui.AddEdit("x+10 yp w200 h30 -Multi -Wrap", g_pth_Settings.dopusRTPath) ; Setting explicit height and -Multi because for some reason it was wrapping the control box down. Not sure if -Wrap is necessary
     labelOpusRTPathTooltipText := "*** For Directory Opus users *** `nPath to dopusrt.exe`n`nOr leave empty to disable Directory Opus integration."
     AddTooltipToControl(hTT, labelOpusRTPath.Hwnd, labelOpusRTPathTooltipText)
     AddTooltipToControl(hTT, dopusPathEdit.Hwnd, labelOpusRTPathTooltipText)
-    ; Button to browse for DOpusRT
+    ; DOpusRT Browse - Button
     browseBtn := settingsGui.AddButton("x+5 yp w60", "Browse...")
     browseBtn.OnEvent("Click", (*) => BrowseForDopusRT(dopusPathEdit))
 
+    ; Set Active Prefix - Edit Box
     labelActiveTabPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Prefix:")
     prefixEdit := settingsGui.AddEdit("x+10 yp w200", g_pth_Settings.activeTabPrefix)
     labelActiveTabPrefixTooltipText := "Text/Characters that appears to the left of the active path for each window group"
     AddTooltipToControl(hTT, labelActiveTabPrefix.Hwnd, labelActiveTabPrefixTooltipText)
     AddTooltipToControl(hTT, prefixEdit.Hwnd, labelActiveTabPrefixTooltipText)
 
+    ; Set Standard Prefix - Edit Box
     labelStandardEntryPrefix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Non-Active Prefix:")
     standardPrefixEdit := settingsGui.AddEdit("x+10 yp w200", g_pth_Settings.standardEntryPrefix)
     labelStandardEntryPrefixTooltipText := "Indentation spaces for inactive tabs, so they line up"
     AddTooltipToControl(hTT, labelStandardEntryPrefix.Hwnd, labelStandardEntryPrefixTooltipText)
     AddTooltipToControl(hTT, standardPrefixEdit.Hwnd, labelStandardEntryPrefixTooltipText)
 
+    ; Set Active Suffix - Edit Box
     ; labelActiveTabSuffix := settingsGui.AddText("xm y+10 w120 h23 +0x200", "Active Tab Suffix:")
     ; suffixEdit := settingsGui.AddEdit("x+10 yp w200", g_settings.activeTabSuffix)
     ; labelActiveTabSuffixTooltipText := "Text/Characters will appear to the right of the active path for each window group, if you want as a label."
     ; AddTooltipToControl(hTT, labelActiveTabSuffix.Hwnd, labelActiveTabSuffixTooltipText)
     ; AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
 
+    ; Debug Mode - Checkbox
     debugCheck := settingsGui.AddCheckbox("xm y+15", "Enable Debug Mode")
     debugCheck.Value := g_pth_Settings.enableExplorerDialogMenuDebug
     labelDebugCheckTooltipText := "Show tooltips with debug information when the hotkey is pressed.`nUseful for troubleshooting."
     AddTooltipToControl(hTT, debugCheck.Hwnd, labelDebugCheckTooltipText)
 
+    ; Always Show Clipboard Menu Item - Checkbox
     clipboardCheck := settingsGui.AddCheckbox("xm y+5", "Always Show Clipboard Menu Item")
     clipboardCheck.Value := g_pth_Settings.alwaysShowClipboardmenuItem
     labelClipboardCheckTooltipText := "If Disabled: The option to paste the clipboard path will only appear when a valid path is found on the clipboard.`nIf Enabled: The menu entry will always appear, but is disabled when no valid path is found."
     AddTooltipToControl(hTT, clipboardCheck.Hwnd, labelClipboardCheckTooltipText)
 
+    ; Group Paths By Window - Checkbox
+    groupByWindowCheck := settingsGui.AddCheckbox("xm y+5", "Group Explorer Paths By Window")
+    groupByWindowCheck.Value := g_pth_Settings.groupPathsByWindow
+    labelGroupByWindowCheckTooltipText := "If disabled, paths from Windows Explorer will all be listed together without grouping by window.`nIdeal for Windows 10 which does not have tabs."
+    AddTooltipToControl(hTT, groupByWindowCheck.Hwnd, labelGroupByWindowCheckTooltipText)
+
+    ; Enable UI Access - Checkbox
     UIAccessCheck := settingsGui.AddCheckbox("xm y+5", "Enable UI Access")
     UIAccessCheck.Value := g_pth_Settings.enableUIAccess
     labelUIAccessCheckTooltipText := ""
@@ -838,17 +855,18 @@ ShowPathSelectorSettingsGUI(*) {
         AddTooltipToControl(hTT, UIAccessCheck.Hwnd, labelUIAccessCheckTooltipText)
     }
 
-    ; Add divider line to the next checkboxes because they aren't persistent settings
+    ; Add divider line for non-persistent settings
     checkBoxDivider := settingsGui.AddText("xm y+15 h2 w150 0x10")
 
-    ; Add checkbox for whether to keep the settings window open after saving
+    ; Keep Open After Saving - Checkbox
     keepOpenCheck := settingsGui.AddCheckbox("xm y+10", "Keep This Window Open After Saving")
     keepOpenCheck.SetFont("s9") ; Smaller font for this checkbox
     keepOpenCheck.Value := false ; False by default - This isn't a saved setting, just a temporary preference
     keepOpenCheck.OnEvent("Click", (*) => ToggleAlwaysOnTopCheckVisibility(keepOpenCheck.Value))
     labelKeepOpenCheckTooltipText := "Keep this window open after saving the settings.`nGood for experimenting with different settings.`n`n(Note: This checkbox setting is not saved.)"
     AddTooltipToControl(hTT, keepOpenCheck.Hwnd, labelKeepOpenCheckTooltipText)
-    ; Checkbox for whether to keep the window on top always. Hidden by default and shown only if keepOpenCheck is checked
+
+    ; Keep Settings on Top - Checkbox (Hidden by default and shown only if keepOpenCheck is checked)
     keepOnTopCheck := settingsGui.AddCheckbox("xm y+5 +Hidden1", "Keep This Window Always On Top") ; +Hidden hides by default, but setting +Hidden1 to make it explicitly hidden
     keepOnTopCheck.SetFont("s9") ; Smaller font for this checkbox
     keepOnTopCheck.Value := false ; False by default - This isn't a saved setting, just a temporary preference
@@ -856,7 +874,8 @@ ShowPathSelectorSettingsGUI(*) {
     labelKeepOnTopCheckTooltipText := "Keep this window always on top of other windows.`nGood for keeping it visible while testing settings.`n`n(Note: This checkbox setting is not saved.)"
     AddTooltipToControl(hTT, keepOnTopCheck.Hwnd, labelKeepOnTopCheckTooltipText)
 
-    ; Add buttons at the bottom - See positioning cheatsheet: https://www.reddit.com/r/AutoHotkey/comments/1968fq0/a_cheatsheet_for_building_guis_using_relative/
+    
+    ; --------- Bottom Buttons ---------- See positioning cheatsheet: https://www.reddit.com/r/AutoHotkey/comments/1968fq0/a_cheatsheet_for_building_guis_using_relative/
     buttonsY := "y+20"
     ; Reset button
     resetBtn := settingsGui.AddButton("xm " buttonsY " w80", "Defaults")
@@ -897,6 +916,7 @@ ShowPathSelectorSettingsGUI(*) {
         standardPrefixEdit.Value := pathSelector_DefaultSettings.standardEntryPrefix
         debugCheck.Value := pathSelector_DefaultSettings.enableExplorerDialogMenuDebug
         clipboardCheck.Value := pathSelector_DefaultSettings.alwaysShowClipboardmenuItem
+        groupByWindowCheck.Value := pathSelector_DefaultSettings.groupPathsByWindow
         UIAccessCheck.Value := pathSelector_DefaultSettings.enableUIAccess
     }
 
@@ -909,6 +929,7 @@ ShowPathSelectorSettingsGUI(*) {
         g_pth_Settings.standardEntryPrefix := standardPrefixEdit.Value
         g_pth_Settings.enableExplorerDialogMenuDebug := debugCheck.Value
         g_pth_Settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
+        g_pth_Settings.groupPathsByWindow := groupByWindowCheck.Value
         g_pth_Settings.enableUIAccess := UIAccessCheck.Value
 
         PathSelector_SaveSettingsToFile()
@@ -1029,7 +1050,7 @@ ShowPathSelectorHelpWindow(*) {
     ; Display info about UI Access depending on the mode the script is running in
     elevatedTipText := ""
     if A_IsCompiled {
-        elevatedTipText := "• To make this program work with dialogs launched by elevated processes without having to run it as admin, place the executable in a trusted location such as `"C:\Program Files\...`""
+        elevatedTipText := "• To make this proram work with dialogs launched by elevated processes without having to run it as admin, place the executable in a trusted location such as `"C:\Program Files\...`""
         elevatedTipText .= "  (You do NOT need to run this exe itself as Admin for this to work.)"
     } else if !ThisScriptRunningStandalone() {
         elevatedTipText := "• To make this work with dialogs launched by elevated processes, enable UI Access via the parent script."
@@ -1175,6 +1196,7 @@ PathSelector_SaveSettingsToFile() {
         IniWrite('"' g_pth_Settings.standardEntryPrefix '"', settingsFilePath, "Settings", "standardEntryPrefix")
         IniWrite(g_pth_Settings.enableExplorerDialogMenuDebug ? "1" : "0", settingsFilePath, "Settings", "enableExplorerDialogMenuDebug")
         IniWrite(g_pth_Settings.alwaysShowClipboardmenuItem ? "1" : "0", settingsFilePath, "Settings", "alwaysShowClipboardmenuItem")
+        IniWrite(g_pth_Settings.groupPathsByWindow ? "1" : "0", settingsFilePath, "Settings", "groupPathsByWindow")
         IniWrite(g_pth_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
         IniWrite(g_pth_Settings.maxMenuLength, settingsFilePath, "Settings", "maxMenuLength")
 
@@ -1218,12 +1240,14 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
         g_pth_Settings.standardEntryPrefix := IniRead(settingsFilePath, "Settings", "standardEntryPrefix", pathSelector_DefaultSettings.standardEntryPrefix)
         g_pth_Settings.enableExplorerDialogMenuDebug := IniRead(settingsFilePath, "Settings", "enableExplorerDialogMenuDebug", pathSelector_DefaultSettings.enableExplorerDialogMenuDebug)
         g_pth_Settings.alwaysShowClipboardmenuItem := IniRead(settingsFilePath, "Settings", "alwaysShowClipboardmenuItem", pathSelector_DefaultSettings.alwaysShowClipboardmenuItem)
+        g_pth_Settings.groupPathsByWindow := IniRead(settingsFilePath, "Settings", "groupPathsByWindow", pathSelector_DefaultSettings.groupPathsByWindow)
         g_pth_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
         g_pth_settings.maxMenuLength := IniRead(settingsFilePath, "Settings", "maxMenuLength", pathSelector_DefaultSettings.maxMenuLength)
 
         ; Convert string boolean values to actual booleans
         g_pth_Settings.enableExplorerDialogMenuDebug := g_pth_Settings.enableExplorerDialogMenuDebug = "1"
         g_pth_Settings.alwaysShowClipboardmenuItem := g_pth_Settings.alwaysShowClipboardmenuItem = "1"
+        g_pth_Settings.groupPathsByWindow := g_pth_Settings.groupPathsByWindow = "1"
         g_pth_Settings.enableUIAccess := g_pth_Settings.enableUIAccess = "1"
 
         ; Convert to int where necessary
