@@ -848,6 +848,14 @@ NavigateLegacyFolderDialog(path, hTV) {
 
 ; Function to show the settings GUI
 ShowPathSelectorSettingsGUI(*) {
+    ; ---------------------------------------- LOCAL FUNCTIONS ----------------------------------------
+    BrowseForDopusRT(editControl) {
+        selectedFile := FileSelect(3, unset, "Select dopusrt.exe", "Executable (*.exe)")
+        if selectedFile
+            editControl.Value := selectedFile
+    }
+    ; --------------------------------------------------------------------------------------------------
+
     ; Create the settings window
     settingsGui := Gui("+Resize", g_pathSelector_programName " - Settings")
     settingsGui.OnEvent("Size", GuiResize)
@@ -1433,85 +1441,6 @@ ShowConditionalFavoritesGui(*) {
     }
 }
 
-GetFavoritesDelimitedString() {
-    favoritePathsString := ""
-    for path in g_pth_settings.favoritePaths {
-        favoritePathsString .= path "|"
-    }
-    return favoritePathsString
-}
-
-GetConditionalFavoritesDelimitedString() {
-    conditionalFavoritesString := ""
-    ; Put double pipe between each entry, and single pipe between values. First value is the condition type
-    i := 0
-    for entry in g_pth_settings.conditionalFavorites {
-        conditionalFavoritesString .= entry.ConditionType "||"
-        j := 0
-        for value in entry.ConditionValues {
-            conditionalFavoritesString .= value
-            ; Add a pipe between values, but not after the last one
-            if (j < entry.ConditionValues.Length - 1) {
-                conditionalFavoritesString .= "|"
-            }
-            j++
-        }
-        conditionalFavoritesString .= "||"
-
-        j := 0
-        for path in entry.Paths {
-            conditionalFavoritesString .= path
-            ; Add a pipe between paths, but not after the last one
-            if (j < entry.Paths.Length - 1) {
-                conditionalFavoritesString .= "|"
-            }
-            j++
-        }
-        ; Add a separator between entries, but not after the last one
-        if (i < g_pth_settings.conditionalFavorites.Length - 1) {
-            conditionalFavoritesString .= "|||"
-        }
-        i++
-    }
-    return conditionalFavoritesString
-}
-
-ParseConditionalFavoritesString(conditionalFavoritesString) {
-    conditionalFavorites := []
-    if (conditionalFavoritesString = "") {
-        return conditionalFavorites
-    }
-    entryIndex := 1
-    entries := StrSplit(conditionalFavoritesString, "|||")
-    for entry in entries {
-        entryParts := StrSplit(entry, "||")
-        if (entryParts.Length > 0) {
-            conditionTypeID := entryParts[1]
-            conditionValues := []
-            paths := []
-            for i, part in entryParts {
-                if (i = 1) {
-                    continue ; Skip the first part which is the condition type
-                } else if (i = 2) { ; Condition values
-                    conditionValues := StrSplit(part, "|")
-                } else { ; Paths
-                    paths := StrSplit(part, "|") 
-                }
-            }
-            conditionalFavorites.Push({
-                ConditionType: conditionTypeID,
-                conditionTypeName: ConditionType.%conditionTypeID%.FriendlyName,
-                ConditionValues: conditionValues,
-                Paths: paths,
-                Index: entryIndex
-            })
-        }
-        entryIndex++
-    }
-
-    return conditionalFavorites
-}
-
 ShowFavoritePathsGui(*) {
     ; Create the main window
     pathGui := Gui("+Resize +MinSize400x300", "Favorite Paths Manager")
@@ -1726,13 +1655,54 @@ AddTooltipToControl(hTT, controlHwnd, text) {
     return result
 }
 
-BrowseForDopusRT(editControl) {
-    selectedFile := FileSelect(3, unset, "Select dopusrt.exe", "Executable (*.exe)")
-    if selectedFile
-        editControl.Value := selectedFile
-}
+
 
 PathSelector_SaveSettingsToFile() {
+    ; ---------------------------- LOCAL FUNCTIONS ----------------------------
+    GetConditionalFavoritesDelimitedString() {
+        conditionalFavoritesString := ""
+        ; Put double pipe between each entry, and single pipe between values. First value is the condition type
+        i := 0
+        for entry in g_pth_settings.conditionalFavorites {
+            conditionalFavoritesString .= entry.ConditionType "||"
+            j := 0
+            for value in entry.ConditionValues {
+                conditionalFavoritesString .= value
+                ; Add a pipe between values, but not after the last one
+                if (j < entry.ConditionValues.Length - 1) {
+                    conditionalFavoritesString .= "|"
+                }
+                j++
+            }
+            conditionalFavoritesString .= "||"
+    
+            j := 0
+            for path in entry.Paths {
+                conditionalFavoritesString .= path
+                ; Add a pipe between paths, but not after the last one
+                if (j < entry.Paths.Length - 1) {
+                    conditionalFavoritesString .= "|"
+                }
+                j++
+            }
+            ; Add a separator between entries, but not after the last one
+            if (i < g_pth_settings.conditionalFavorites.Length - 1) {
+                conditionalFavoritesString .= "|||"
+            }
+            i++
+        }
+        return conditionalFavoritesString
+    }
+
+    GetFavoritesDelimitedString() {
+        favoritePathsString := ""
+        for path in g_pth_settings.favoritePaths {
+            favoritePathsString .= path "|"
+        }
+        return favoritePathsString
+    }
+    ; -------------------------------------------------------------------------
+
     SaveToPath(settingsFileDir) {
         settingsFilePath := settingsFileDir "\" g_pth_SettingsFile.fileName
 
@@ -1787,6 +1757,44 @@ PathSelector_SaveSettingsToFile() {
 }
 
 PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
+    ; ---------------------------- LOCAL FUNCTIONS ----------------------------
+    ParseConditionalFavoritesString(conditionalFavoritesString) {
+        conditionalFavorites := []
+        if (conditionalFavoritesString = "") {
+            return conditionalFavorites
+        }
+        entryIndex := 1
+        entries := StrSplit(conditionalFavoritesString, "|||")
+        for entry in entries {
+            entryParts := StrSplit(entry, "||")
+            if (entryParts.Length > 0) {
+                conditionTypeID := entryParts[1]
+                conditionValues := []
+                paths := []
+                for i, part in entryParts {
+                    if (i = 1) {
+                        continue ; Skip the first part which is the condition type
+                    } else if (i = 2) { ; Condition values
+                        conditionValues := StrSplit(part, "|")
+                    } else { ; Paths
+                        paths := StrSplit(part, "|") 
+                    }
+                }
+                conditionalFavorites.Push({
+                    ConditionType: conditionTypeID,
+                    conditionTypeName: ConditionType.%conditionTypeID%.FriendlyName,
+                    ConditionValues: conditionValues,
+                    Paths: paths,
+                    Index: entryIndex
+                })
+            }
+            entryIndex++
+        }
+    
+        return conditionalFavorites
+    }
+    ; -------------------------------------------------------------------------
+    
     if FileExist(settingsFilePath) {
         ; Load each setting from the INI file
         g_pth_Settings.dialogMenuHotkey := IniRead(settingsFilePath, "Settings", "dialogMenuHotkey", pathSelector_DefaultSettings.dialogMenuHotkey)
