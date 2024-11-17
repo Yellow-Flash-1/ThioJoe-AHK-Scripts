@@ -36,7 +36,8 @@ class pathSelector_DefaultSettings {
     ; Path to dopusrt.exe - can be empty to explicitly disable Directory Opus integration, but it will automatically disable if the file is not found anyway
     static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"
     static maxMenuLength := 120             ; Maximum length of menu items. The true max is MAX_PATH, but thats really long so this is a reasonable limit
-    static favoritePaths := []                  ; Array of favorite paths to show at the top of the menu
+    static favoritePaths := []              ; Array of favorite paths to show at the top of the menu
+    static conditionalFavorites := []       ; Array of objects with 'path' and 'condition' properties. If the condition is true when the menu is shown, the path will be added to the favorites
 }
 
 ; System Tray Menu Options
@@ -201,6 +202,29 @@ RemoveEmptyArrayEntries(arr) {
 
 ValidatePathCharacters(path) {
     return RegExMatch(path, "^[^<>`"\/|?*]+$")
+}
+
+ValidatePathCharacters_AllowWildCards(path) {
+    return RegExMatch(path, "^[^<>`"\/|?]+$")
+}
+
+; Enum class for condition types
+class ConditionType {
+    static DialogOwnerExe := {
+        StringID: "DialogOwnerExe",
+        FriendlyName: "Executable File Name Match",
+        Description: "If the dialog window was opened by an executable file name that matches the value. ( * is a wildcard )"
+    }
+    static CurrentDialogPath := {
+        StringID: "CurrentDialogPath",
+        FriendlyName: "Current Dialog Path Match",
+        Description: "If the current path of the dialog window matches the value.`n( * is a wildcard )"
+    }
+}
+
+; Check for match using strings with wildcard asterisks
+StringMatchWithWildcards(str, matchStr) {
+    return RegExMatch(str, "i)" RegExReplace(matchStr, "\*", ".*"))
 }
 
 ; ------------------------------------ MAIN LOGIC FUNCTIONS ---------------------------------------------------
@@ -395,6 +419,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
         windowID := WinGetID("a")
         windowClass := WinGetClass("a")
         windowHwnd := WinExist("a")
+        windowExe := WinGetProcessName("a")
     } catch as err {
         ; If we can't get window info, wait briefly and try once more
         Sleep(25)
@@ -402,6 +427,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             windowID := WinGetID("a")
             windowClass := WinGetClass("a")
             windowHwnd := WinExist("a")
+            windowExe := WinGetProcessName("a")
         } catch as err {
             if (debugMode) {
                 ToolTip("Unable to detect active window")
@@ -458,6 +484,44 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             hasItems := true
         }
     }
+
+    ; Display conditional favorites - Exe name condition
+    for conditionalFavorite in g_pth_Settings.conditionalFavorites {
+        if (conditionalFavorite.conditionType = ConditionType.DialogOwnerExe.StringID) {
+            for conditionExeValue in conditionalFavorite.ConditionValues {
+                if (StringMatchWithWildcards(windowExe, conditionExeValue)) {
+                    InsertMenuItem(CurrentLocations, "Conditional Favorites - Executable Match", unset, unset, unset, unset) ; Header
+                    ; Add all the paths
+                    for conditionPath in conditionalFavorite.Paths {
+                        InsertMenuItem(CurrentLocations, conditionPath, conditionPath, A_WinDir . "\system32\imageres.dll", "-81", false) ; Conditional Favorite Path
+                        hasItems := true
+                    }
+                    break ; No need to keep going if we found a match
+                }
+            }
+        }
+    }
+
+    ; Display conditional favorites - Current dialog path condition
+    for conditionalFavorite in g_pth_Settings.conditionalFavorites {
+        if (conditionalFavorite.conditionType = ConditionType.CurrentDialogPath.StringID) {
+            for conditionPathValue in conditionalFavorite.ConditionValues {
+                if (StringMatchWithWildcards(windowPath, conditionPathValue)) {
+                    InsertMenuItem(CurrentLocations, "Conditional Favorites - Path Match", unset, unset, unset, unset) ; Header
+                    ; Add all the paths
+                    for conditionPath in conditionalFavorite.Paths {
+                        InsertMenuItem(CurrentLocations, conditionPath, conditionPath, A_WinDir . "\system32\imageres.dll", "-81", false) ; Conditional Favorite Path
+                        hasItems := true
+                    }
+                    break ; No need to keep going if we found a match
+                }
+            }
+        }
+    }
+
+    ; Add a separator if we had favorites
+    if (hasItems)
+        InsertMenuItem(CurrentLocations, "", unset, unset, unset, unset) ; Separator
 
     ; Only get Directory Opus paths if dopusRTPath is set
     if (g_pth_Settings.dopusRTPath != "") {
@@ -832,8 +896,12 @@ ShowPathSelectorSettingsGUI(*) {
     ; AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
 
     ; Bring up favorites setting GUI - Button
-    favoritesBtn := settingsGui.AddButton("xm y+10 w120", "Manage Favorites")
+    favoritesBtn := settingsGui.AddButton("xm y+10 w120 h30", "Favorites")
     favoritesBtn.OnEvent("Click", (*) => ShowFavoritePathsGui())
+
+    ; Bring up conditional favorites GUI - Button
+    conditionalFavoritesBtn := settingsGui.AddButton("xp+130 yp+0 w150 h30", "Conditional Favorites")
+    conditionalFavoritesBtn.OnEvent("Click", (*) => ShowConditionalFavoritesGui())
     
     ; Debug Mode - Checkbox
     debugCheck := settingsGui.AddCheckbox("xm y+15", "Enable Debug Mode")
@@ -1044,12 +1112,404 @@ ShowPathSelectorSettingsGUI(*) {
     }
 }
 
+ShowConditionalFavoritesGui(*) {
+    ; Create a deep copy of the settings instead of a reference
+    pendingConditionalFavorites := []
+    for entry in g_pth_settings.conditionalFavorites {
+        pendingConditionalFavorites.Push({
+            Index: entry.Index,
+            ConditionType: entry.ConditionType,
+            ConditionTypeName: entry.ConditionTypeName,
+            ConditionValues: entry.ConditionValues,
+            Paths: entry.Paths
+        })
+    }
+
+    currentlyEditedRow := -1
+
+    ; Map condition type dropdown integers to conditionTypes
+    ConditionTypeIndex := Map(
+        ConditionType.DialogOwnerExe.StringID, 1,
+        ConditionType.CurrentDialogPath.StringID, 2
+    )
+    ; Track currently edited row
+    currentRowNum := 0
+    
+    ; Create the main window
+    pathGui := Gui("+Resize +MinSize600x500", "Conditional Favorites Manager")
+    pathGui.OnEvent("Size", GuiResize)
+    pathGui.SetFont("s10", "Segoe UI")
+    
+    ; Add ListView to show existing conditions
+    pathGui.AddText("w580", "Conditional Favorites:")
+    listView := pathGui.AddListView("w580 h200 vConditionsList", ["Index", "Condition Type", "Condition Values", "Paths"])
+
+    ; Add label to show which is the currently selected entry
+    labelActiveSelection := pathGui.AddText("w580", "Currently Editing: [None]")
+    
+    ; Add buttons for managing entries - Add events separately so we can create a new object variable for each button
+    addBtn := pathGui.AddButton("w80", "Add New")
+    addBtn.OnEvent("Click", AddEntry)
+    editBtn := pathGui.AddButton("x+10 yp w80", "Edit")
+    editBtn.OnEvent("Click", EditEntry)
+    removeBtn := pathGui.AddButton("x+10 yp w80", "Remove")
+    removeBtn.OnEvent("Click", RemoveEntry)
+    
+    ; Add edit panel (initially disabled)
+    grpBox := pathGui.AddGroupBox("xs w580 h220", "Entry Details")
+    
+    ; Condition Type dropdown
+    pathGui.AddText("xp+10 yp+20", "Condition Value Type:")
+    typeDropdown := pathGui.AddDropDownList("w200 vConditionType Choose1", [ConditionType.DialogOwnerExe.FriendlyName, ConditionType.CurrentDialogPath.FriendlyName])
+    typeDropdown.OnEvent("Change", ShowConditionTypeDescription)
+    ; Condition Type Description text - Shows next to the dropdown
+    typeDescription := pathGui.AddText("x+10 yp+10 w150 +Wrap", ConditionType.CurrentDialogPath.Description)
+    ShowConditionTypeDescription()  ; Show description for the default selected type
+    
+    ; Condition Values
+    pathGui.AddText("xs+10 yp+40", "Condition Values (one per line):")
+    valuesEdit := pathGui.AddEdit("w560 h60 vConditionValues Multi VScroll", "")
+    
+    ; Paths
+    pathGui.AddText("xs+10 y+10", "Paths to show when any of the condition values match (one per line):")
+    pathsEdit := pathGui.AddEdit("w560 h60 vPaths Multi VScroll", "")
+    
+    ; Main buttons
+    okBtn := pathGui.AddButton("xp+10 yp+15 w80", "Save")
+    okBtn.OnEvent("Click", SaveAndClose)
+    cancelBtn := pathGui.AddButton("x+10 yp w80", "Cancel")
+    cancelBtn.OnEvent("Click", (*) => pathGui.Destroy())
+    applyBtn := pathGui.AddButton("x+10 yp w80", "Apply")
+    applyBtn.OnEvent("Click", ValidateAndApplyEntry)
+        
+    ; Initially disable edit panel controls
+    EnableEditPanel(false)
+
+    ; Set initial sizes
+    initialWindowWidth := 600
+    ; Properly set the height of the groupbox to fit all controls
+    grpBox.GetPos(unset, &grpBoxY, unset, &grpBoxHeight)
+    pathsEdit.GetPos(unset, &pathEditY, unset, &pathEditHeight)
+    totalHeight := pathEditY + pathEditHeight - grpBoxY + 20
+    grpBox.Move(unset, unset, initialWindowWidth - 20, totalHeight) ; Set width to fill the window
+
+    ; Set initial height to fit everything
+    grpBox.GetPos(unset, &grpBoxY, unset, &grpBoxHeight)
+    initialHeight := grpBoxY + grpBoxHeight + 75
+
+    PopulateListView()
+    
+    ; Show the GUI
+    pathGui.Show("w" initialWindowWidth " h" initialHeight)
+
+    ; ------------------------- LOCAL FUNCTIONS -------------------------
+
+    PopulateListView() {
+        listView.Delete()
+
+        ; Create strings to show in ListView
+        valueString := ""
+        pathString := ""
+        for entry in pendingConditionalFavorites {
+            valueString := JoinDelimited(entry.ConditionValues, "; ")
+            pathString := JoinDelimited(entry.Paths, "; ")
+            listView.Add(unset, entry.Index, entry.ConditionTypeName, valueString, pathString)
+        }
+
+        listView.Redraw()
+    }
+
+    ; Helper function to show the description for the selected condition type
+    ShowConditionTypeDescription(*) {
+        dropdownIndex := typeDropdown.Value
+        for key, value in ConditionTypeIndex {
+            if (value = dropdownIndex) {
+                ; Since 'key' will be the StringID, we need to find the matching enum value
+                typeDescription.Value := ConditionType.%key%.Description
+                break
+            }
+        }
+        typeDescription.Redraw()
+    }
+
+    GetConditionTypeStringIDFromFriendlyName(friendlyName) {
+        for key, typeObj in ConditionType.OwnProps() {  ; Use OwnProps() to get static properties
+            if (typeObj.FriendlyName = friendlyName) {
+                return typeObj.StringID
+            }
+        }
+        return ""
+    }
+    
+    ; Function to enable/disable edit panel
+    EnableEditPanel(enable := true) {
+        typeDropdown.Enabled := enable
+        valuesEdit.Enabled := enable
+        pathsEdit.Enabled := enable
+    }
+
+    UpdateActiveSelectedRow(num) {
+        currentlyEditedRow := num
+        labelActiveSelection.Value := "Currently Editing: " num
+        labelActiveSelection.SetFont("s10 Bold cRed")
+    }
+    
+    ; Handle adding new entry
+    AddEntry(*) {
+        EnableEditPanel(true)
+        typeDropdown.Value := ConditionTypeIndex[ConditionType.DialogOwnerExe.StringID]
+        valuesEdit.Value := ""
+        pathsEdit.Value := ""
+        ; Create new entry object in pendingConditionalFavorites
+        entry := {
+            Index : pendingConditionalFavorites.Length + 1,
+            ConditionType: ConditionType.DialogOwnerExe.StringID,
+            ConditionTypeName: ConditionType.DialogOwnerExe.FriendlyName,
+            ConditionValues: [],
+            Paths: []
+        }
+        pendingConditionalFavorites.Push(entry)
+        ; Add new entry to ListView
+        PopulateListView()
+        ; Update the current 
+        UpdateActiveSelectedRow(entry.Index)
+    }
+    
+    ; Handle editing selected entry
+    EditEntry(*) {
+        if (currentRowNum := listView.GetNext()) {
+            EnableEditPanel(true)
+            entry := pendingConditionalFavorites[currentRowNum] ; The index in the array is 0-based, but the ListView index is 1-based
+            typeDropdown.Value := ConditionTypeIndex[entry.ConditionType]
+            valuesEdit.Value := Join(entry.ConditionValues)
+            pathsEdit.Value := Join(entry.Paths)
+            UpdateActiveSelectedRow(entry.Index)
+        }
+    }
+    
+    ; Handle removing selected entry
+    RemoveEntry(*) {
+        if (row := listView.GetNext()) {
+            listView.Delete(row)
+            pendingConditionalFavorites.RemoveAt(row)
+        }
+
+        ; Update the indexes of the entries in case any were removed
+        for i, entry in pendingConditionalFavorites {
+            entry.Index := i ; Autohotkey is 1 index based
+        }
+
+        PopulateListView()
+    }
+
+    ValidateAndApplyEntry(*) {
+        if (typeDropdown.Enabled) {  ; If panel is enabled, include current values
+            entry := {
+                ConditionType: GetConditionTypeStringIDFromFriendlyName(typeDropdown.Text),
+                conditionTypeName: typeDropdown.Text,
+                ConditionValues: SplitAndTrim(valuesEdit.Value),
+                Paths: SplitAndTrim(pathsEdit.Value),
+                Index: currentlyEditedRow
+            }
+
+            ; Validate values
+            for value in entry.ConditionValues {
+                if (!ValidatePathCharacters_AllowWildCards(value)) {
+                    MsgBox("Invalid characters found in value:`n" value "`n`nCannot contain these characters:`n< > : `" / | ? `n`nPlease correct and try again.", "Error", "Icon!")
+                    return
+                }
+            }
+            
+            ; Validate paths
+            for path in entry.Paths {
+                if (!ValidatePathCharacters(path)) {
+                    MsgBox("Invalid characters found in path:`n" path "`n`nCannot contain these characters:`n< > : `" / | * ? `n`nPlease correct and try again.", "Error", "Icon!")
+                    return
+                }
+            }
+            
+            ; Add to array if both values and paths are provided
+            if (entry.ConditionValues.Length > 0 && entry.Paths.Length > 0) {
+                pendingConditionalFavorites[currentlyEditedRow] := entry
+            } else {
+                MsgBox("Both Condition Values and Paths are required to save a conditional favorite.", "Error", "Icon!")
+                return
+            }
+
+            PopulateListView()
+        }
+    }
+   
+    SaveAndClose(*) {
+        ; If any entry is being edited, apply it
+        if (currentlyEditedRow != -1) {
+            ValidateAndApplyEntry()
+        }
+
+        ; Remove any pending conditional favorites that are empty
+        for index, entry in pendingConditionalFavorites {
+            if (entry.ConditionValues.Length = 0 || entry.Paths.Length = 0) {
+                pendingConditionalFavorites.RemoveAt(index)
+            }
+        }
+
+        ; Update the indexes of the entries in case any were removed
+        for i, entry in pendingConditionalFavorites {
+            entry.Index := i ; Autohotkey is 1 index based
+        }
+
+        g_pth_Settings.conditionalFavorites := pendingConditionalFavorites
+        pathGui.Destroy()
+    }
+    
+    ; Helper function to split and trim text into array
+    SplitAndTrim(text) {
+        arr := []
+        for line in StrSplit(text, "`n", "`r") {
+            if (Trim(line) != "") {
+                arr.Push(Trim(line))
+            }
+        }
+        return arr
+    }
+    
+    ; Helper function to join array into multiline text
+    Join(arr) {
+        text := ""
+        for item in arr {
+            text .= item "`n"
+        }
+        return RTrim(text, "`n")
+    }
+
+    JoinDelimited(arr, delimiter) {
+        text := ""
+        for item in arr {
+            text .= item delimiter
+        }
+        return RTrim(text, delimiter)
+    }
+
+    GuiResize(thisGui, minMax, width, height) {
+        if minMax = -1  ; The window has been minimized
+            return
+
+        ; Update control positions based on new window size
+        for ctrl in thisGui {
+            curr_X := "", curr_Y := "", currWidth := "", currHeight := "" ; Reset values
+            ctrl.GetPos(&curr_X, &curr_Y, &currWidth, &currHeight)
+
+            ; For specific control objects
+            if ctrl = typeDescription {
+                typeDropdown.GetPos(unset, &dropdownY, unset, unset)
+                ; Set height to the same as the dropdown, and fill the remaining width.
+                
+                ctrl.Move(unset, dropdownY, width - curr_X - 20)  ; Set width to fill the window
+                ctrl.Redraw()
+                continue
+                
+            } else if ctrl = grpBox {
+                pathsEdit.GetPos(unset, &pathEditY, unset, &pathEditHeight)
+                totalHeight := pathEditY + pathEditHeight - curr_Y + 20
+                ctrl.Move(unset, unset, width - 20, totalHeight) ; Set width to fill the window
+
+            ; Buttons
+            } else if ctrl = okBtn or ctrl = cancelBtn {
+                ctrl.Move(unset, height-45)
+                ctrl.Redraw()
+            } else if ctrl = applyBtn {
+                ctrl.Move(width - currWidth - 30, height-45)  ; Bottom align buttons with 40px margin from bottom
+                ctrl.Redraw()
+            }
+
+            ; For general control types
+            else if ctrl.HasProp("Type") {
+                if ctrl.Type = "Edit" {
+                    ctrl.Move(unset, unset, width - 40)  ; Set consistent width for edit boxes
+                    ctrl.Redraw()
+                }
+            }
+        }
+    }
+}
+
 GetFavoritesDelimitedString() {
     favoritePathsString := ""
     for path in g_pth_settings.favoritePaths {
         favoritePathsString .= path "|"
     }
     return favoritePathsString
+}
+
+GetConditionalFavoritesDelimitedString() {
+    conditionalFavoritesString := ""
+    ; Put double pipe between each entry, and single pipe between values. First value is the condition type
+    i := 0
+    for entry in g_pth_settings.conditionalFavorites {
+        conditionalFavoritesString .= entry.ConditionType "||"
+        j := 0
+        for value in entry.ConditionValues {
+            conditionalFavoritesString .= value
+            ; Add a pipe between values, but not after the last one
+            if (j < entry.ConditionValues.Length - 1) {
+                conditionalFavoritesString .= "|"
+            }
+            j++
+        }
+        conditionalFavoritesString .= "||"
+
+        j := 0
+        for path in entry.Paths {
+            conditionalFavoritesString .= path
+            ; Add a pipe between paths, but not after the last one
+            if (j < entry.Paths.Length - 1) {
+                conditionalFavoritesString .= "|"
+            }
+            j++
+        }
+        ; Add a separator between entries, but not after the last one
+        if (i < g_pth_settings.conditionalFavorites.Length - 1) {
+            conditionalFavoritesString .= "|||"
+        }
+        i++
+    }
+    return conditionalFavoritesString
+}
+
+ParseConditionalFavoritesString(conditionalFavoritesString) {
+    conditionalFavorites := []
+    if (conditionalFavoritesString = "") {
+        return conditionalFavorites
+    }
+    entryIndex := 1
+    entries := StrSplit(conditionalFavoritesString, "|||")
+    for entry in entries {
+        entryParts := StrSplit(entry, "||")
+        if (entryParts.Length > 0) {
+            conditionTypeID := entryParts[1]
+            conditionValues := []
+            paths := []
+            for i, part in entryParts {
+                if (i = 1) {
+                    continue ; Skip the first part which is the condition type
+                } else if (i = 2) { ; Condition values
+                    conditionValues := StrSplit(part, "|")
+                } else { ; Paths
+                    paths := StrSplit(part, "|") 
+                }
+            }
+            conditionalFavorites.Push({
+                ConditionType: conditionTypeID,
+                conditionTypeName: ConditionType.%conditionTypeID%.FriendlyName,
+                ConditionValues: conditionValues,
+                Paths: paths,
+                Index: entryIndex
+            })
+        }
+        entryIndex++
+    }
+
+    return conditionalFavorites
 }
 
 ShowFavoritePathsGui(*) {
@@ -1294,6 +1754,7 @@ PathSelector_SaveSettingsToFile() {
         IniWrite(g_pth_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
         IniWrite(g_pth_Settings.maxMenuLength, settingsFilePath, "Settings", "maxMenuLength")
         IniWrite(GetFavoritesDelimitedString(), settingsFilePath, "Settings", "favoritePaths")
+        IniWrite(GetConditionalFavoritesDelimitedString(), settingsFilePath, "Settings", "conditionalFavorites")
 
         g_pth_SettingsFile.usingSettingsFile := true
 
@@ -1339,6 +1800,7 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
         g_pth_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
         g_pth_settings.maxMenuLength := IniRead(settingsFilePath, "Settings", "maxMenuLength", pathSelector_DefaultSettings.maxMenuLength)
         g_pth_settings.favoritePaths := StrSplit(IniRead(settingsFilePath, "Settings", "favoritePaths", ""), "|") ; Split the delimited string to an array
+        g_pth_settings.conditionalFavorites := ParseConditionalFavoritesString(IniRead(settingsFilePath, "Settings", "conditionalFavorites", ""))
 
         ; Convert string boolean values to actual booleans
         g_pth_Settings.enableExplorerDialogMenuDebug := g_pth_Settings.enableExplorerDialogMenuDebug = "1"
