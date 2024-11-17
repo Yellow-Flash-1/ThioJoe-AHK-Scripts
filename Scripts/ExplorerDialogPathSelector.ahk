@@ -212,12 +212,12 @@ ValidatePathCharacters_AllowWildCards(path) {
 class ConditionType {
     static DialogOwnerExe := {
         StringID: "DialogOwnerExe",
-        FriendlyName: "Executable File Name Match",
+        FriendlyName: "Executable Name Match",
         Description: "If the dialog window was opened by an executable file name that matches the value. ( * is a wildcard )"
     }
     static CurrentDialogPath := {
         StringID: "CurrentDialogPath",
-        FriendlyName: "Current Dialog Path Match",
+        FriendlyName: "Dialog Path Match",
         Description: "If the current path of the dialog window matches the value.`n( * is a wildcard )"
     }
 }
@@ -1149,8 +1149,8 @@ ShowConditionalFavoritesGui(*) {
     pathGui.SetFont("s10", "Segoe UI")
     
     ; Add ListView to show existing conditions
-    pathGui.AddText("w580", "Conditional Favorites:")
-    listView := pathGui.AddListView("w580 h200 vConditionsList", ["Index", "Condition Type", "Condition Values", "Paths"])
+    pathGui.AddText("w580", "Conditional Favorites Rules:")
+    listView := pathGui.AddListView("w580 h200 vConditionsList", ["#", "Condition Type", "Condition Values", "Paths"])
 
     ; Add label to show which is the currently selected entry
     labelActiveSelection := pathGui.AddText("w580", "Currently Editing: [None]")
@@ -1162,6 +1162,8 @@ ShowConditionalFavoritesGui(*) {
     editBtn.OnEvent("Click", EditEntry)
     removeBtn := pathGui.AddButton("x+10 yp w80", "Remove")
     removeBtn.OnEvent("Click", RemoveEntry)
+    helpBtn := pathGui.AddButton("x+10 yp w80", "Help")
+    helpBtn.OnEvent("Click", ShowHelpMsgBox)
     
     ; Add edit panel (initially disabled)
     grpBox := pathGui.AddGroupBox("xs w580 h220", "Entry Details")
@@ -1183,8 +1185,8 @@ ShowConditionalFavoritesGui(*) {
     pathsEdit := pathGui.AddEdit("w560 h60 vPaths Multi VScroll", "")
     
     ; Main buttons
-    okBtn := pathGui.AddButton("xp+10 yp+15 w80", "Save")
-    okBtn.OnEvent("Click", SaveAndClose)
+    saveBtn := pathGui.AddButton("xp+10 yp+15 w80", "Save")
+    saveBtn.OnEvent("Click", SaveAndClose)
     cancelBtn := pathGui.AddButton("x+10 yp w80", "Cancel")
     cancelBtn.OnEvent("Click", (*) => pathGui.Destroy())
     applyBtn := pathGui.AddButton("x+10 yp w80", "Apply")
@@ -1212,6 +1214,20 @@ ShowConditionalFavoritesGui(*) {
 
     ; ------------------------- LOCAL FUNCTIONS -------------------------
 
+    GetDpiScaleFactor(){
+        return A_ScreenDPI / 96
+    }
+
+    GetListViewColumnWidth(columnIndex) {
+        static LVM_GETCOLUMNWIDTH := 0x101D
+        return SendMessage(LVM_GETCOLUMNWIDTH, columnIndex - 1, 0, listView.Hwnd)
+    }
+
+    IncreaseRelativeColumnWidth(columnIndex, increaseAmount) {
+        currentWidth := GetListViewColumnWidth(columnIndex) / GetDpiScaleFactor() ; Need to use the unscaled width
+        listView.ModifyCol(columnIndex, currentWidth + increaseAmount)
+    }
+
     PopulateListView() {
         listView.Delete()
 
@@ -1222,6 +1238,22 @@ ShowConditionalFavoritesGui(*) {
             valueString := JoinDelimited(entry.ConditionValues, "; ")
             pathString := JoinDelimited(entry.Paths, "; ")
             listView.Add(unset, entry.Index, entry.ConditionTypeName, valueString, pathString)
+        }
+
+        ; Set column widths
+        defaultValColWidth := 120 ; Note that this will be adjusted automatically for scaling
+        listView.ModifyCol(1, "Auto")  ; Index - AutoHdr to auto-size based on column contents. AutoHdr would be header text
+        listView.ModifyCol(2, "Auto") ; Condition Type - Auto to auto-size based on content since there are only 2 options
+        listView.ModifyCol(3, defaultValColWidth) ; Condition Values column - Fixed starting size auto-size based on content, then adjust further if necessary
+        listView.ModifyCol(4, "Auto") ; Paths - Just expand as big as necessary. It will auto overflow to the right and user can expand window or scroll
+
+        IncreaseRelativeColumnWidth(1, 3)
+        IncreaseRelativeColumnWidth(2, 5)
+
+        ; Set optimal column width for the values column. It's really the only one that needs more special handling since paths will just overflow to the right, and other columns are fixed size
+        valuesColumnWidth := GetListViewColumnWidth(3)
+        if (valuesColumnWidth < defaultValColWidth) {
+            listView.ModifyCol(3, defaultValColWidth) ; Set to 180 if it's less than that
         }
 
         listView.Redraw()
@@ -1258,8 +1290,21 @@ ShowConditionalFavoritesGui(*) {
 
     UpdateActiveSelectedRow(num) {
         currentlyEditedRow := num
-        labelActiveSelection.Value := "Currently Editing: " num
+        labelActiveSelection.Value := "Currently Editing: #" num
         labelActiveSelection.SetFont("s10 Bold cRed")
+    }
+
+    ShowHelpMsgBox(*) {
+        helpString := "Conditional Favorites allow you to have the menu show certain paths only under specific conditions.`n`n"
+        helpString .= "Currently supported conditions are:`n"
+        helpString .= " - " ConditionType.DialogOwnerExe.FriendlyName ": When the dialog window was launched by a certain program, based on the program's executable file name.`n"
+        helpString .= " - " ConditionType.CurrentDialogPath.FriendlyName ": When the current path location of the dialog matches a specified path you set.`n`n"
+        helpString .= "Condition Values: These let you define what will trigger the conditional favorite paths to show.`n"
+        helpString .= "   - Notes: These are not case sensitive and you can use asterisks as wildcards. You can set multiple values per rule by putting one per line. If any match, all the set paths will be shown.`n"
+        helpString .= "   - Example: A conditional value of 'Photoshop.exe' will cause the associated paths to show when the dialog window is opened by Photoshop.`n"
+        helpString .= "Paths: These are the paths that will be shown when the condition values match.`n`n"
+
+        MsgBox(helpString, "Conditional Favorites Help", "Iconi")
     }
     
     ; Handle adding new entry
@@ -1398,42 +1443,50 @@ ShowConditionalFavoritesGui(*) {
         return RTrim(text, delimiter)
     }
 
-    GuiResize(thisGui, minMax, width, height) {
+    GetControlRightEdge(ctrl) {
+        ctrl.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
+        return ctrl_X + ctrlWidth
+    }
+
+    GuiResize(thisGui, minMax, window_width, window_height) {
         if minMax = -1  ; The window has been minimized
             return
 
         ; Update control positions based on new window size
         for ctrl in thisGui {
-            curr_X := "", curr_Y := "", currWidth := "", currHeight := "" ; Reset values
-            ctrl.GetPos(&curr_X, &curr_Y, &currWidth, &currHeight)
+            ctrl.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
 
             ; For specific control objects
             if ctrl = typeDescription {
                 typeDropdown.GetPos(unset, &dropdownY, unset, unset)
                 ; Set height to the same as the dropdown, and fill the remaining width.
-                
-                ctrl.Move(unset, dropdownY, width - curr_X - 20)  ; Set width to fill the window
+                ctrl.Move(unset, dropdownY, window_width - ctrl_X - 20)  ; Set width to fill to the right edge of the window (with some margin)
                 ctrl.Redraw()
                 continue
                 
             } else if ctrl = grpBox {
                 pathsEdit.GetPos(unset, &pathEditY, unset, &pathEditHeight)
-                totalHeight := pathEditY + pathEditHeight - curr_Y + 20
-                ctrl.Move(unset, unset, width - 20, totalHeight) ; Set width to fill the window
+                totalHeight := pathEditY + pathEditHeight - ctrl_Y + 20
+                ctrl.Move(unset, unset, window_width - 30, totalHeight)  ; Set width to fill to the right edge of the window (with some margin)
+
+            } else if ctrl = listView {
+                ctrl.Move(unset, unset, window_width - 30)  ; Set consistent width for edit boxes
+                    ctrl.Redraw()
 
             ; Buttons
-            } else if ctrl = okBtn or ctrl = cancelBtn {
-                ctrl.Move(unset, height-45)
+            } else if ctrl = saveBtn or ctrl = cancelBtn {
+                ctrl.Move(unset, window_height-45)
                 ctrl.Redraw()
             } else if ctrl = applyBtn {
-                ctrl.Move(width - currWidth - 30, height-45)  ; Bottom align buttons with 40px margin from bottom
+                ctrl.Move(window_width - ctrlWidth - 20, window_height-45)  ; Bottom align buttons with 40px margin from bottom
                 ctrl.Redraw()
-            }
+            } else if ctrl = helpBtn {
+                ctrl.Move(window_width - ctrlWidth - 20)  ; Bottom align buttons with 40px margin from bottom
 
             ; For general control types
-            else if ctrl.HasProp("Type") {
+            } else if ctrl.HasProp("Type") {
                 if ctrl.Type = "Edit" {
-                    ctrl.Move(unset, unset, width - 40)  ; Set consistent width for edit boxes
+                    ctrl.Move(unset, unset, window_width - 50)  ; Set consistent width for edit boxes
                     ctrl.Redraw()
                 }
             }
