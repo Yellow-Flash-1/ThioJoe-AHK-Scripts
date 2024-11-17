@@ -36,6 +36,7 @@ class pathSelector_DefaultSettings {
     ; Path to dopusrt.exe - can be empty to explicitly disable Directory Opus integration, but it will automatically disable if the file is not found anyway
     static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"
     static maxMenuLength := 120             ; Maximum length of menu items. The true max is MAX_PATH, but thats really long so this is a reasonable limit
+    static favoritePaths := []                  ; Array of favorite paths to show at the top of the menu
 }
 
 ; System Tray Menu Options
@@ -188,6 +189,18 @@ class SettingsFile {
 ThisScriptRunningStandalone() {
     ;MsgBox("A_ScriptName: " A_ScriptFullPath "`n`nA_LineFile: " A_LineFile "`n`nRunning Standalone: " (A_ScriptFullPath = A_LineFile ? "True" : "False"))
     return A_ScriptFullPath = A_LineFile
+}
+
+RemoveEmptyArrayEntries(arr) {
+    for i, v in arr {
+        if (v = "")
+            arr.RemoveAt(i)
+    }
+    return arr
+}
+
+ValidatePathCharacters(path) {
+    return RegExMatch(path, "^[^<>`"\/|?*]+$")
 }
 
 ; ------------------------------------ MAIN LOGIC FUNCTIONS ---------------------------------------------------
@@ -436,6 +449,15 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     CurrentLocations := Menu()
     hasItems := false
     currentMenuNum := 0 ; Used to keep track of the current menu item number so we can refer to each item by index like "1&" in case of duplicate path entries
+
+    ; Add favorite paths if there are any
+    if (g_pth_Settings.favoritePaths.Length > 0) {
+        InsertMenuItem(CurrentLocations, "Favorites", unset, unset, unset, unset) ; Header
+        for favoritePath in g_pth_Settings.favoritePaths {
+            InsertMenuItem(CurrentLocations, favoritePath, favoritePath, A_WinDir . "\system32\imageres.dll", "-1024", false) ; Favorite Path
+            hasItems := true
+        }
+    }
 
     ; Only get Directory Opus paths if dopusRTPath is set
     if (g_pth_Settings.dopusRTPath != "") {
@@ -809,6 +831,10 @@ ShowPathSelectorSettingsGUI(*) {
     ; AddTooltipToControl(hTT, labelActiveTabSuffix.Hwnd, labelActiveTabSuffixTooltipText)
     ; AddTooltipToControl(hTT, suffixEdit.Hwnd, labelActiveTabSuffixTooltipText)
 
+    ; Bring up favorites setting GUI - Button
+    favoritesBtn := settingsGui.AddButton("xm y+10 w120", "Manage Favorites")
+    favoritesBtn.OnEvent("Click", (*) => ShowFavoritePathsGui())
+    
     ; Debug Mode - Checkbox
     debugCheck := settingsGui.AddCheckbox("xm y+15", "Enable Debug Mode")
     debugCheck.Value := g_pth_Settings.enableExplorerDialogMenuDebug
@@ -918,6 +944,7 @@ ShowPathSelectorSettingsGUI(*) {
         clipboardCheck.Value := pathSelector_DefaultSettings.alwaysShowClipboardmenuItem
         groupByWindowCheck.Value := pathSelector_DefaultSettings.groupPathsByWindow
         UIAccessCheck.Value := pathSelector_DefaultSettings.enableUIAccess
+        ; Favorites paths are updated in the favorites GUI
     }
 
     SaveSettings(*) {
@@ -931,6 +958,7 @@ ShowPathSelectorSettingsGUI(*) {
         g_pth_Settings.alwaysShowClipboardmenuItem := clipboardCheck.Value
         g_pth_Settings.groupPathsByWindow := groupByWindowCheck.Value
         g_pth_Settings.enableUIAccess := UIAccessCheck.Value
+        ; Favorites paths are updated in the favorites GUI
 
         PathSelector_SaveSettingsToFile()
 
@@ -987,7 +1015,7 @@ ShowPathSelectorSettingsGUI(*) {
                     } else if ctrl.Text = "About" {
                         ; Align it with the Help button and go above it
                         ctrl.Move(width-85, height-75)
-                    } else {
+                    } else if ctrl.Text = "Save" or ctrl.Text = "Defaults" or ctrl.Text = "Cancel" {
                         ctrl.Move(unset, height-45)  ; Bottom align buttons with 40px margin from bottom
                     }
                     ctrl.Redraw()
@@ -1013,6 +1041,72 @@ ShowPathSelectorSettingsGUI(*) {
                 keepOnTopCheck.Visible := false
             }
         }
+    }
+}
+
+GetFavoritesDelimitedString() {
+    favoritePathsString := ""
+    for path in g_pth_settings.favoritePaths {
+        favoritePathsString .= path "|"
+    }
+    return favoritePathsString
+}
+
+ShowFavoritePathsGui(*) {
+    ; Create the main window
+    pathGui := Gui("+Resize +MinSize400x300", "Favorite Paths Manager")
+    
+    ; Add instructions text
+    pathGui.AddText(, "Enter folder paths to always show (one per line):")
+    
+    ; Add multi-line edit control with scrollbars
+    editPaths := pathGui.AddEdit("vPaths r15 w400 Multi VScroll", "")
+    
+    ; Create a horizontal button layout using a GroupBox
+    buttonGroup := pathGui.AddGroupBox("w400 h50", "")
+    
+    ; Add OK and Cancel buttons
+    saveBtn := pathGui.AddButton("xp+20 yp+15 w80", "OK").OnEvent("Click", SavePaths)
+    cancelBtn := pathGui.AddButton("x+10 yp w80", "Cancel").OnEvent("Click", (*) => pathGui.Destroy())
+    
+    ; Populate edit control with existing paths
+    if g_pth_settings.HasProp("favoritePaths") && g_pth_settings.favoritePaths.Length > 0 {
+        existingPaths := ""
+        for path in g_pth_settings.favoritePaths {
+            existingPaths .= path "`n"
+        }
+        editPaths.Value := RTrim(existingPaths, "`n")
+    }
+    
+    ; Show the GUI
+    pathGui.Show()
+    
+    ; Handle saving paths
+    SavePaths(*) {
+        ; Get the paths from the edit control
+        rawPaths := editPaths.Value
+        
+        ; Split into array and remove empty lines
+        pathArray := []
+        for path in StrSplit(rawPaths, "`n", "`r") {
+            if (Trim(path) != "") {
+                pathArray.Push(RTrim(Trim(path), "\"))
+            }
+        }
+
+        ; Ensure none have invalid characters
+        for path in pathArray {
+            if (!ValidatePathCharacters(path)) {
+                MsgBox("Invalid characters found in path:`n" path "`n`nCannot contain these characters:`n< > : `" / | ? * `n`nPlease correct and try again.", "Error", "Icon!")
+                return
+            }
+        }
+        
+        ; Update the settings
+        g_pth_settings.favoritePaths := pathArray
+        
+        ; Close the GUI
+        pathGui.Destroy()
     }
 }
 
@@ -1199,6 +1293,7 @@ PathSelector_SaveSettingsToFile() {
         IniWrite(g_pth_Settings.groupPathsByWindow ? "1" : "0", settingsFilePath, "Settings", "groupPathsByWindow")
         IniWrite(g_pth_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
         IniWrite(g_pth_Settings.maxMenuLength, settingsFilePath, "Settings", "maxMenuLength")
+        IniWrite(GetFavoritesDelimitedString(), settingsFilePath, "Settings", "favoritePaths")
 
         g_pth_SettingsFile.usingSettingsFile := true
 
@@ -1243,6 +1338,7 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
         g_pth_Settings.groupPathsByWindow := IniRead(settingsFilePath, "Settings", "groupPathsByWindow", pathSelector_DefaultSettings.groupPathsByWindow)
         g_pth_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
         g_pth_settings.maxMenuLength := IniRead(settingsFilePath, "Settings", "maxMenuLength", pathSelector_DefaultSettings.maxMenuLength)
+        g_pth_settings.favoritePaths := StrSplit(IniRead(settingsFilePath, "Settings", "favoritePaths", ""), "|") ; Split the delimited string to an array
 
         ; Convert string boolean values to actual booleans
         g_pth_Settings.enableExplorerDialogMenuDebug := g_pth_Settings.enableExplorerDialogMenuDebug = "1"
@@ -1252,6 +1348,9 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
 
         ; Convert to int where necessary
         g_pth_settings.maxMenuLength := g_pth_settings.maxMenuLength + 0
+
+        ; Remove empty entries from arrays
+        g_pth_settings.favoritePaths := RemoveEmptyArrayEntries(g_pth_settings.favoritePaths)
 
         g_pth_SettingsFile.usingSettingsFile := true
     } else {
