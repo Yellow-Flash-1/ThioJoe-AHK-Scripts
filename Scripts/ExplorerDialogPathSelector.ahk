@@ -1163,7 +1163,7 @@ ShowConditionalFavoritesGui(*) {
     removeBtn := pathGui.AddButton("x+10 yp w80", "Remove")
     removeBtn.OnEvent("Click", RemoveEntry)
     helpBtn := pathGui.AddButton("x+10 yp w80", "Help")
-    helpBtn.OnEvent("Click", ShowHelpMsgBox)
+    helpBtn.OnEvent("Click", ShowConditionalFavoritesHelpWindow)
     
     ; Add edit panel (initially disabled)
     grpBox := pathGui.AddGroupBox("xs w580 h220", "Entry Details")
@@ -1293,20 +1293,7 @@ ShowConditionalFavoritesGui(*) {
         labelActiveSelection.Value := "Currently Editing: #" num
         labelActiveSelection.SetFont("s10 Bold cRed")
     }
-
-    ShowHelpMsgBox(*) {
-        helpString := "Conditional Favorites allow you to have the menu show certain paths only under specific conditions.`n`n"
-        helpString .= "Currently supported conditions are:`n"
-        helpString .= " - " ConditionType.DialogOwnerExe.FriendlyName ": When the dialog window was launched by a certain program, based on the program's executable file name.`n"
-        helpString .= " - " ConditionType.CurrentDialogPath.FriendlyName ": When the current path location of the dialog matches a specified path you set.`n`n"
-        helpString .= "Condition Values: These let you define what will trigger the conditional favorite paths to show.`n"
-        helpString .= "   - Notes: These are not case sensitive and you can use asterisks as wildcards. You can set multiple values per rule by putting one per line. If any match, all the set paths will be shown.`n"
-        helpString .= "   - Example: A conditional value of 'Photoshop.exe' will cause the associated paths to show when the dialog window is opened by Photoshop.`n"
-        helpString .= "Paths: These are the paths that will be shown when the condition values match.`n`n"
-
-        MsgBox(helpString, "Conditional Favorites Help", "Iconi")
-    }
-    
+  
     ; Handle adding new entry
     AddEntry(*) {
         EnableEditPanel(true)
@@ -1519,6 +1506,92 @@ ShowConditionalFavoritesGui(*) {
             }
         }
     }
+}
+
+ShowConditionalFavoritesHelpWindow(*) {
+    helpGui := Gui(unset, "Conditional Favorites - Help")
+    helpGui.SetFont("s10", "Segoe UI")
+    winWidth := 500
+    textWidth := winWidth - 20  ; Subtract some margin from the right
+
+    WidthForMargin(winWidth, textControl, margin) {
+        textControl.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
+        remainingWidth := winWidth - ctrl_X
+        return remainingWidth - margin
+    }
+
+    winWidthString := "w" winWidth
+    txtWStr := "w" textWidth
+
+    ; Title
+    titleText := helpGui.AddText("xm y+10 " txtWStr " h20", "Conditional Favorites")
+    titleText.SetFont("s12 bold")
+
+    ; Overview
+    helpGui.AddText("xm y+10 " txtWStr, "Conditional Favorites allow you to have the menu show certain paths only under specific conditions.")
+
+    ; Supported Conditions Section
+    conditionsHeader := helpGui.AddText("xm y+20 " txtWStr " h20", "Supported Conditions:")
+    conditionsHeader.SetFont("s10 bold underline")
+    
+    conditionLabel1 := helpGui.AddText("xm+15 y+5 " txtWStr,  "• " ConditionType.DialogOwnerExe.FriendlyName)
+    conditionLabel1.SetFont("s10 bold")
+    conditionDesc1 := helpGui.AddText("xm+30 y+2 " txtWStr, "When the dialog window was launched by a certain program, based on the program's executable file name.")
+    conditionDesc1.Move(unset, unset, WidthForMargin(winWidth, conditionDesc1, 20))
+    
+    conditionLabel2 := helpGui.AddText("xm+15 y+10 " txtWStr, "• " ConditionType.CurrentDialogPath.FriendlyName)
+    conditionLabel2.SetFont("s10 bold")
+    conditionDesc2 := helpGui.AddText("xm+30 y+2 " txtWStr " +Wrap", "When the current path of the dialog matches a specified path you set.")
+    conditionDesc2.Move(unset, unset, WidthForMargin(winWidth, conditionDesc2, 20))
+
+    ; Condition Values Section
+    valuesHeader := helpGui.AddText("xm y+20 " txtWStr " h20", "Condition Values:")
+    valuesHeader.SetFont("s10 bold underline")
+    helpGui.AddText("xm y+5 " txtWStr, "These let you define what will trigger the conditional favorite paths to show.")
+    
+    ; --- Notes
+    notesText := helpGui.AddText("xm y+10 " txtWStr " h20", "Notes:")
+    notesText.SetFont("italic")
+    helpGui.AddText("xm+15 y+2 " txtWStr, "• Values are not case sensitive")
+    helpGui.AddText("xm+15 y+2 " txtWStr, "• Asterisks can be used as wildcards")
+    helpGui.AddText("xm+15 y+2 " txtWStr, "• Multiple values can be set per rule (one per line)")
+    helpGui.AddText("xm+15 y+2 " txtWStr, "• If any values match, all associated paths will be shown")
+
+    ; ---- Executable name match Examples
+    execExamplesText := helpGui.AddText("xm y+10 " txtWStr, "Executable Name Match Examples: ")
+    execExamplesText.SetFont("italic")
+    execExample1 := helpGui.AddText("xm+15 y+5 " txtWStr, "• A conditional value of 'Photoshop.exe' will cause the associated paths to show when the dialog window is opened by Photoshop (Photoshop.exe).")
+    execExample2 := helpGui.AddText("xm+15 y+5 " txtWStr, "• A conditional value 'Adobe*' will match when the window is opened by 'Adobe Reader.exe' or any other process that matches the wildcard pattern.")
+    execExample1.Move(unset, unset, WidthForMargin(winWidth, execExample1, 20))
+    execExample2.Move(unset, unset, WidthForMargin(winWidth, execExample2, 20))
+
+    ; ---- Path match Examples
+    pathExamplesText := helpGui.AddText("xm y+10 " txtWStr, "Path Match Examples: ")
+    pathExamplesText.SetFont("italic")
+    pathExample1 := helpGui.AddText("xm+15 y+5 " txtWStr, "• A conditional value of 'C:\Program Files\Adobe' will cause the associated paths to show when the dialog window's path is exactly`n'C:\Program Files\Adobe'")
+    pathExample2 := helpGui.AddText("xm+15 y+5 " txtWStr, "• A conditional value of 'C:\Program Files\*' will match when the dialog window's path starts with 'C:\Program Files\'")
+    pathExample1.Move(unset, unset, WidthForMargin(winWidth, pathExample1, 20))
+    pathExample2.Move(unset, unset, WidthForMargin(winWidth, pathExample2, 20))
+
+
+    ; Paths Section
+    pathsHeader := helpGui.AddText("xm y+20 " txtWStr " h20", "Paths:")
+    pathsHeader.SetFont("s10 bold underline")
+    helpGui.AddText("xm y+5 " txtWStr, "These are the paths that will be shown when the condition values match.")
+
+    ; Close button
+    closeButton := helpGui.AddButton("xm y+20 w80 Default", "Close")
+    closeButton.OnEvent("Click", (*) => helpGui.Destroy())
+
+    ; Get bottom position of close button to set the height of the window
+    closeButton.GetPos(&ctrl_X, &ctrl_Y, &ctrlWidth, &ctrlHeight)
+    windowHeight := ctrl_Y + ctrlHeight + 20
+
+    ; Show with specific initial size
+    helpGui.Show(winWidthString " h" windowHeight)
+
+    ; Default to focus on the close button
+    closeButton.Focus()
 }
 
 ShowFavoritePathsGui(*) {
