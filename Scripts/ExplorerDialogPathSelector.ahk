@@ -455,7 +455,7 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
     }
 
     ; Don't display menu unless it's a dialog or console window
-    if !(windowClass ~= "^(?i:#32770|ConsoleWindowClass)$") {
+    if !(windowClass ~= "^(?i:#32770|ConsoleWindowClass|SunAwtDialog)$") {
         if (debugMode) {
             ToolTip("Window class does not match expected: " windowClass)
             Sleep(1000)
@@ -706,8 +706,41 @@ PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowC
     if (f_path = "")
         return
 
-    if (windowClass = "#32770") ; It's a dialog
-    {
+    if (windowClass = "ConsoleWindowClass") {
+        WinActivate("ahk_id " windowID)
+        SetKeyDelay(0)
+        Send("{Esc}pushd " f_path "{Enter}")
+        return
+    }
+    ; Java dialogs have a different structure
+    else if (windowClass = "SunAwtDialog") {
+        WinActivate("ahk_id " windowID)
+
+        ; Send Alt + N to focus the file name edit box
+        DllCall("keybd_event", "UChar", 0x12, "UChar", 0x38, "UInt", 0, "UPtr", 0) ; Alt Down
+        Sleep(20)
+        DllCall("keybd_event", "UChar", 0x4E, "UChar", 0x31, "UInt", 0, "UPtr", 0) ; N Down
+        Sleep(20)
+        DllCall("keybd_event", "UChar", 0x4E, "UChar", 0x31, "UInt", 2, "UPtr", 0) ; N up
+        DllCall("keybd_event", "UChar", 0x12, "UChar", 0x38, "UInt", 2, "UPtr", 0) ; Alt up
+
+        ; Select the text in the box and delete it because otherwise it appends it
+        Sleep(50)
+        Send("^a") 
+        Sleep(20)
+        Send("{Del}")
+        ; Send the path. Add a backslash just in case - the dialog seems to accept it
+        Sleep(20)
+        Send(f_path "\")
+        Send("{Enter}")
+        Sleep(20)
+        ; Remove the text in the box because it doesn't remove it automatically
+        Send("^a") 
+        Sleep(20)
+        Send("{Delete}")
+        return
+
+    } else { ; Default: #32770 or other compatible dialog
         WinActivate("ahk_id " windowID)
 
         ; Check if it's a legacy dialog
@@ -723,11 +756,6 @@ PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowC
             ControlSend("{Enter}", addressbar, "a")
             ControlFocus("Edit1", "a")
         }
-        return
-    } else if (windowClass = "ConsoleWindowClass") {
-        WinActivate("ahk_id " windowID)
-        SetKeyDelay(0)
-        Send("{Esc}pushd " f_path "{Enter}")
         return
     }
 }
