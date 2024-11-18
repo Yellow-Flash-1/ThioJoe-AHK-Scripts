@@ -58,7 +58,7 @@ PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.2.2.0"
+global g_pathSelector_version := "1.2.3.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
@@ -295,7 +295,7 @@ GetDOpusPaths() {
     }
 
     tempFile := A_Temp "\dopus_paths.xml"
-    try FileDelete(tempFile)
+    try FileDelete(tempFile) ; Delete any existing temp file
 
     try {
         cmd := '"' g_pth_Settings.dopusRTPath '" /info "' tempFile '",paths'
@@ -308,7 +308,7 @@ GetDOpusPaths() {
         FileDelete(tempFile)
 
         ; Parse paths from XML
-        paths := []
+        pathsObjectArray := []
 
         ; Start after the XML declaration
         xmlContent := RegExReplace(xmlContent, "^.*?<results.*?>", "")
@@ -321,20 +321,25 @@ GetDOpusPaths() {
             RegExMatch(match[1], "active_tab=`"([^`"]*)`"", &activeTabMatch)
             RegExMatch(match[1], "active_lister=`"([^`"]*)`"", &activeListerMatch)
 
+            ; Unescape any XML characters as necessary - Only need to worry about &amp; and &apos; because the rest are not valid file path characters
+            pathStr := match[2]
+            pathStr := StrReplace(pathStr, "&amp;", "&")
+            pathStr := StrReplace(pathStr, "&apos;", "'")
+
             ; Create path object
             pathObj := {
-                path: match[2],
+                path: pathStr,
                 lister: listerMatch ? listerMatch[1] : "unknown",
                 isActiveTab: activeTabMatch ? (activeTabMatch[1] = "1") : false,
                 isActiveLister: activeListerMatch ? (activeListerMatch[1] = "1") : false
             }
-            paths.Push(pathObj)
+            pathsObjectArray.Push(pathObj)
 
             ; Remove the processed path element and continue searching
             xmlContent := SubStr(xmlContent, match.Pos + match.Len)
         }
 
-        return paths
+        return pathsObjectArray
     } catch as err {
         MsgBox("Error reading Directory Opus paths: " err.Message "`n`nDirectory Opus integration will be disabled.", "DOpus Integration Error", "Icon!")
         return []
@@ -381,6 +386,9 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
             else
                 text := g_pth_Settings.standardEntryPrefix "..." SubStr(text, (-1 * maxMenuLength))
         }
+
+        ; If the display text has an ampersand, double it to escape it so Autohotkey displays it correctly
+        text := StrReplace(text, "&", "&&")
 
         ; Add the item and increment the counter
         menuObj.Insert(unset, text, PathSelector_Navigate.Bind(unset, unset, unset, pathStr, windowClass, windowID))
