@@ -58,7 +58,7 @@ PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.2.3.0"
+global g_pathSelector_version := "1.2.4.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
@@ -676,14 +676,39 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowClass, windowID) {
     ; ------------------------- LOCAL FUNCTIONS -------------------------
     NavigateDialog(path, windowHwnd, dialogInfo) {
+        
         if (dialogInfo.Type = "ModernDialog") {
             NavigateUsingAddressbar(path)
-
         } else if (dialogInfo.Type = "HasEditControl") {
+            WM_SETTEXT := 0x000C
+
+            ; Get the initial text of the edit control
+            initialText := ControlGetText(dialogInfo.ControlHwnd, "ahk_id " windowHwnd)
+
+            ; Try checking for SysListView32 control to see if any files are selected, then deselect them
+            try {
+                countSelected := ListViewGetContent("Count Selected", "SysListView321", "ahk_id " windowHwnd)
+                if (countSelected > 0){
+                    ; Focus on the listview
+                    ControlFocus("SysListView321", "ahk_id " windowHwnd)
+                    ; Send Ctrl + Space to deselect
+                    SendInput("^{Space}")
+                }
+            } catch Error as err{
+                OutputDebug("Error or no files selected in ListView. Message: " err.Message)
+            }
             ; Send the path to the edit control text box using SendMessage
-            DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
+            DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", WM_SETTEXT, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
             ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
             DllCall("SendMessage", "Ptr", windowHwnd, "UInt", 0x0111, "Ptr", 0x1, "Ptr", 0) ; command ID (0x1) typically corresponds to the IDOK control which represents the primary action button, whether it's labeled "Save" or "Open".
+
+            ; Restore the initial text of the edit control - Usually this happens automatically but just in case
+            if (initialText){
+                DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", WM_SETTEXT, "Ptr", 0, "Str", initialText)
+            ; Or if there was no initial text and now the control has the path leftover in it, then just clear the control text
+            } else if (ControlGetText(dialogInfo.ControlHwnd, "ahk_id " windowHwnd) = path) {
+                DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", WM_SETTEXT, "Ptr", 0, "Str", "")
+            }
 
         } else if (dialogInfo.Type = "FolderBrowserDialog") {
             NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
