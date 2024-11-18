@@ -668,7 +668,10 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowClass, windowID) {
     ; ------------------------- LOCAL FUNCTIONS -------------------------
     NavigateDialog(path, windowHwnd, dialogInfo) {
-        if (dialogInfo.Type = "HasEditControl") {
+        if (dialogInfo.Type = "ModernDialog") {
+            NavigateUsingAddressbar(path)
+
+        } else if (dialogInfo.Type = "HasEditControl") {
             ; Send the path to the edit control text box using SendMessage
             DllCall("SendMessage", "Ptr", dialogInfo.ControlHwnd, "UInt", 0x000C, "Ptr", 0, "Str", path) ; 0xC is WM_SETTEXT - Sets the text of the text box
             ; Tell the dialog to accept the text box contents, which will cause it to navigate to the path
@@ -678,11 +681,43 @@ PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowC
             NavigateLegacyFolderDialog(path, dialogInfo.ControlHwnd)
         }
     }
+    
+    NavigateUsingAddressbar(path){
+        Send("!{d}")
+        Sleep(50)
+        addressbar := ControlGetFocus("a")
+        ControlSetText(path, addressbar, "a")
+        ControlSend("{Enter}", addressbar, "a")
+        ControlFocus("Edit1", "a")
+    }
+
+    GetDialogAddressbarHwnd(windowHwnd) {
+        controls := WinGetControls(windowHwnd)
+        for controlClassNN in controls {
+            if (controlClassNN ~= "ToolbarWindow32") {
+                controlText := ControlGetText(controlClassNN, windowHwnd)
+                if (controlText ~= "Address: ") {
+                    controlHwnd := ControlGetHwnd(controlClassNN, windowHwnd)
+                    return controlHwnd
+                }
+            }
+        }
+        return ""
+    }
 
     DetectDialogType(hwnd) {
         ; Wait for the dialog window with class #32770 to be active
         if !WinWaitActive("ahk_class #32770", unset, 10) {
             return 0
+        }
+
+        try {
+            addressbarHwnd := GetDialogAddressbarHwnd(hwnd)
+            if (addressbarHwnd) {
+                return { Type: "ModernDialog", ControlHwnd: addressbarHwnd }
+            }
+        } catch  {
+            ; Nothing just move on
         }
 
         ; Look for an "Edit1" control, which is typically the file name edit box in file dialogs
@@ -748,13 +783,8 @@ PathSelector_Navigate(ThisMenuItemName, ThisMenuItemPos, MyMenu, f_path, windowC
             ; Use the legacy navigation approach
             NavigateDialog(f_path, windowID, dialogInfo)
         } else {
-            ; Use the existing modern dialog approach
-            Send("!{d}")
-            Sleep(50)
-            addressbar := ControlGetFocus("a")
-            ControlSetText(f_path, addressbar, "a")
-            ControlSend("{Enter}", addressbar, "a")
-            ControlFocus("Edit1", "a")
+            ; Assume modern dialog
+            NavigateUsingAddressbar(f_path)
         }
         return
     }
