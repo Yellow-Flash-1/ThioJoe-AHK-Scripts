@@ -52,14 +52,14 @@ pathSelector_SystemTraySettings := {
     addSeparatorBefore: false,        ; Add a separator before the settings menu item
     addSeparatorAfter: true,          ; Add a separator after the settings menu item
     alwaysDefaultItem: false,         ; If true, the path selector menu item will always be the default even if the script is included in another script
-    hideTrayIcon: false               ; Whether to hide the entire tray icon or not (not just the menu item)
+    hideTrayIcon: false               ; Whether to hide the entire tray icon or not (not just the menu item) - Note this will be overridden by g_pth_Settings.hideTrayIcon
 }
 
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.2.5.0"
+global g_pathSelector_version := "1.3.0.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
@@ -140,6 +140,9 @@ InitializePathSelectorSettings() {
     if !ThisScriptRunningStandalone() or A_IsCompiled {
         g_pth_Settings.enableUIAccess := false
     }
+
+    SetMenuTheme("AllowDark") ; Set the menu theme to follow system theme
+
     return
 }
 
@@ -233,6 +236,32 @@ class ConditionType {
 ; Check for match using strings with wildcard asterisks
 StringMatchWithWildcards(str, matchStr) {
     return RegExMatch(str, "i)^" RegExReplace(matchStr, "\*", ".*") "$")
+}
+
+; Sets the theme of menus by the process - Adapted from https://www.autohotkey.com/boards/viewtopic.php?style=19&f=82&t=133886#p588184
+; Usage: Put this before creating any menus. AllowDark will folow system theme. Seems that once set, the app must restart to change it.
+;SetMenuTheme("ForceDark")
+SetMenuTheme(appMode:=0) {
+    static preferredAppMode       :=  {Default:0, AllowDark:1, ForceDark:2, ForceLight:3, Max:4}
+    static uxtheme                :=  dllCall("Kernel32.dll\GetModuleHandle", "Str", "uxtheme", "Ptr")
+
+    if (uxtheme) {
+        fnSetPreferredAppMode := dllCall("Kernel32.dll\GetProcAddress", "Ptr", uxtheme, "Ptr", 135, "Ptr")
+        fnFlushMenuThemes := dllCall("Kernel32.dll\GetProcAddress", "Ptr", uxtheme, "Ptr", 136, "Ptr")
+    } else {
+        return -1
+    }
+
+    if (preferredAppMode.hasProp(appMode))
+        appMode:=preferredAppMode.%appMode%
+
+    if (fnSetPreferredAppMode && fnFlushMenuThemes) { ; Ensure the functions were found
+        prev := dllCall(fnSetPreferredAppMode, "Int", appMode)
+        dllCall(fnFlushMenuThemes)
+        return prev
+    } else {
+        return -1
+    }
 }
 
 ; ------------------------------------ MAIN LOGIC FUNCTIONS ---------------------------------------------------
