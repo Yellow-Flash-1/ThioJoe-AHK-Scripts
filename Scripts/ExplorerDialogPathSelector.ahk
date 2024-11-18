@@ -35,9 +35,12 @@ class pathSelector_DefaultSettings {
     static standardEntryPrefix := "    "    ; Indentation for inactive tabs, so they line up
     ; Path to dopusrt.exe - can be empty to explicitly disable Directory Opus integration, but it will automatically disable if the file is not found anyway
     static dopusRTPath := "C:\Program Files\GPSoftware\Directory Opus\dopusrt.exe"
-    static maxMenuLength := 120             ; Maximum length of menu items. The true max is MAX_PATH, but thats really long so this is a reasonable limit
     static favoritePaths := []              ; Array of favorite paths to show at the top of the menu
     static conditionalFavorites := []       ; Array of objects with 'path' and 'condition' properties. If the condition is true when the menu is shown, the path will be added to the favorites
+
+    ; Settings appearing in the settings file only, not in the GUI
+    static maxMenuLength := 120             ; Maximum length of menu items. The true max is MAX_PATH, but thats really long so this is a reasonable limit
+    static hideTrayIcon := false            ; Whether to hide the tray icon or not
 }
 
 ; System Tray Menu Options
@@ -48,17 +51,15 @@ pathSelector_SystemTraySettings := {
     positionIndex: 1,                 ; Position index for the settings menu item. 1 is the first item, 2 is the second, etc.
     addSeparatorBefore: false,        ; Add a separator before the settings menu item
     addSeparatorAfter: true,          ; Add a separator after the settings menu item
-    alwaysDefaultItem: false          ; If true, the path selector menu item will always be the default even if the script is included in another script
+    alwaysDefaultItem: false,         ; If true, the path selector menu item will always be the default even if the script is included in another script
+    hideTrayIcon: false               ; Whether to hide the entire tray icon or not (not just the menu item)
 }
-PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
-
-;TraySetIcon("Explorer Dialog Path Selector Icon.ico") ; Uncomment to set a custom icon for the system tray. There is one in the 'Assets' folder of the repo
 
 ; ------------------------------------------ INITIALIZATION ----------------------------------------------------
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.2.4.0"
+global g_pathSelector_version := "1.2.5.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
@@ -87,6 +88,13 @@ global g_pth_SettingsFile := SettingsFile(
 )
 
 InitializePathSelectorSettings()
+
+; System tray menu setup
+pathSelector_SystemTraySettings.hideTrayIcon := g_pth_Settings.hideTrayIcon
+PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
+;TraySetIcon("Explorer Dialog Path Selector Icon.ico") ; Uncomment to set a custom icon for the system tray. There is one in the 'Assets' folder of the repo
+
+
 ; If the script is running standalone and UI access is installed...
 ; Reload self with UI Access for the script - Allows usage within elevated windows protected by UAC without running the script as admin
 ; See Docs: https://www.autohotkey.com/docs/v1/FAQ.htm#uac
@@ -1967,6 +1975,7 @@ PathSelector_SaveSettingsToFile() {
         IniWrite(g_pth_Settings.groupPathsByWindow ? "1" : "0", settingsFilePath, "Settings", "groupPathsByWindow")
         IniWrite(g_pth_Settings.enableUIAccess ? "1" : "0", settingsFilePath, "Settings", "enableUIAccess")
         IniWrite(g_pth_Settings.maxMenuLength, settingsFilePath, "Settings", "maxMenuLength")
+        IniWrite(g_pth_Settings.hideTrayIcon ? "1" : "0", settingsFilePath, "Settings", "hideTrayIcon")
         IniWrite(GetFavoritesDelimitedString(), settingsFilePath, "Settings", "favoritePaths")
         IniWrite(GetConditionalFavoritesDelimitedString(), settingsFilePath, "Settings", "conditionalFavorites")
 
@@ -2051,6 +2060,7 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
         g_pth_Settings.groupPathsByWindow := IniRead(settingsFilePath, "Settings", "groupPathsByWindow", pathSelector_DefaultSettings.groupPathsByWindow)
         g_pth_Settings.enableUIAccess := IniRead(settingsFilePath, "Settings", "enableUIAccess", pathSelector_DefaultSettings.enableUIAccess)
         g_pth_settings.maxMenuLength := IniRead(settingsFilePath, "Settings", "maxMenuLength", pathSelector_DefaultSettings.maxMenuLength)
+        g_pth_Settings.hideTrayIcon := IniRead(settingsFilePath, "Settings", "hideTrayIcon", pathSelector_DefaultSettings.hideTrayIcon)
         g_pth_settings.favoritePaths := StrSplit(IniRead(settingsFilePath, "Settings", "favoritePaths", ""), "|") ; Split the delimited string to an array
         g_pth_settings.conditionalFavorites := ParseConditionalFavoritesString(IniRead(settingsFilePath, "Settings", "conditionalFavorites", ""))
 
@@ -2059,6 +2069,7 @@ PathSelector_LoadSettingsFromSettingsFilePath(settingsFilePath) {
         g_pth_Settings.alwaysShowClipboardmenuItem := g_pth_Settings.alwaysShowClipboardmenuItem = "1"
         g_pth_Settings.groupPathsByWindow := g_pth_Settings.groupPathsByWindow = "1"
         g_pth_Settings.enableUIAccess := g_pth_Settings.enableUIAccess = "1"
+        g_pth_Settings.hideTrayIcon := g_pth_Settings.hideTrayIcon = "1"
 
         ; Convert to int where necessary
         g_pth_settings.maxMenuLength := g_pth_settings.maxMenuLength + 0
@@ -2088,6 +2099,11 @@ PathSelector_SetupSystemTray(systemTraySettings) {
     addSeparatorBefore          := systemTraySettings.HasOwnProp("addSeparatorBefore")         ? systemTraySettings.addSeparatorBefore         : false
     addSeparatorAfter           := systemTraySettings.HasOwnProp("addSeparatorAfter")          ? systemTraySettings.addSeparatorAfter          : true
     alwaysDefaultItem           := systemTraySettings.HasOwnProp("alwaysDefaultItem")          ? systemTraySettings.alwaysDefaultItem          : false
+    hideTrayIcon                := systemTraySettings.HasOwnProp("hideTrayIcon")               ? systemTraySettings.hideTrayIcon               : false
+
+    if (hideTrayIcon) {
+        A_IconHidden := true
+    }
 
     if (!showSettingsTrayMenuItem) {
         return
