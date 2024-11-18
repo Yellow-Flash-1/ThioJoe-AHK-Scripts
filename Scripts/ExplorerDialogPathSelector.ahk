@@ -58,7 +58,7 @@ PathSelector_SetupSystemTray(pathSelector_SystemTraySettings)
 
 ; Set global variables about the program and compiler directives. These use regex to extract data from the lines above them (A_PriorLine)
 ; Keep the line pairs together!
-global g_pathSelector_version := "1.2.1.0"
+global g_pathSelector_version := "1.2.2.0"
 ;@Ahk2Exe-Let ProgramVersion=%A_PriorLine~U)^(.+"){1}(.+)".*$~$2%
 
 global g_pathSelector_programName := "Explorer Dialog Path Selector"
