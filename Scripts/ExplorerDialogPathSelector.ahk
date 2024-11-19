@@ -386,6 +386,18 @@ GetDOpusPaths() {
 ; Display the menu
 DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must accept the hotkey as its first parameter
     ; ------------------------- LOCAL FUNCTIONS -------------------------
+    GetFolderNameFromCLSID(clsid) {
+        try {
+            ; Create Shell.Application COM object
+            shell := ComObject("Shell.Application")
+            folder := shell.Namespace(clsid)
+            return folder.Self.Name
+        } catch as err {
+            OutputDebug("Error Getting Folder Name From CLSID " clsid " : " err.Message)
+            return ""
+        }
+    }
+
     GetDialogAddressBarPath(windowHwnd) {
         controls := WinGetControls(windowHwnd)
         ; Go through controls that match "ToolbarWindow32*" in the class name and check if their text starts with "Address: "
@@ -426,6 +438,14 @@ DisplayDialogPathMenu(thisHotkey) { ; Called via the Hotkey function, so it must
 
         ; If the display text has an ampersand, double it to escape it so Autohotkey displays it correctly
         text := StrReplace(text, "&", "&&")
+
+        ; If it's a CLSID, get the folder name from the CLSID
+        if (pathStr ~= "::{") {
+            clsidFriendlyName := GetFolderNameFromCLSID(pathStr)
+            if (clsidFriendlyName != "") {
+                text := clsidFriendlyName
+            }
+        }
 
         ; Add the item and increment the counter
         menuObj.Insert(unset, text, PathSelector_Navigate.Bind(unset, unset, unset, pathStr, windowClass, windowID))
